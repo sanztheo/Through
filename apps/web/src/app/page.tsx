@@ -1,12 +1,41 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 
+interface ProjectInfo {
+  path: string;
+  name: string;
+  framework: string;
+  startCommand: string;
+  port: number;
+  analyzedAt: string;
+}
+
 export default function HomePage() {
+  const router = useRouter();
   const { isElectron, api } = useElectronAPI();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recentProjects, setRecentProjects] = useState<ProjectInfo[]>([]);
+
+  // Load recent projects from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem("recentProjects");
+    if (stored) {
+      setRecentProjects(JSON.parse(stored));
+    }
+  }, []);
+
+  const saveProject = (project: ProjectInfo) => {
+    const updated = [
+      project,
+      ...recentProjects.filter((p) => p.path !== project.path),
+    ].slice(0, 10); // Keep only last 10 projects
+    setRecentProjects(updated);
+    localStorage.setItem("recentProjects", JSON.stringify(updated));
+  };
 
   const handleOpenProject = async () => {
     if (!api) return;
@@ -17,10 +46,25 @@ export default function HomePage() {
       const folderPath = await api.selectFolder();
 
       if (folderPath) {
-        console.log("Selected folder:", folderPath);
-        // TODO: Analyze the project
         const analysis = await api.analyzeProject(folderPath);
         console.log("Analysis result:", analysis);
+
+        // Save project info
+        const projectInfo: ProjectInfo = {
+          path: analysis.projectPath,
+          name: analysis.projectPath.split("/").pop() || "Unknown",
+          framework: analysis.detection.framework,
+          startCommand: analysis.detection.startCommand,
+          port: analysis.detection.defaultPort,
+          analyzedAt: analysis.analyzedAt,
+        };
+
+        saveProject(projectInfo);
+
+        // Navigate to project view
+        router.push(
+          `/project?path=${encodeURIComponent(analysis.projectPath)}`,
+        );
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to select folder");
@@ -28,6 +72,10 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleProjectClick = (project: ProjectInfo) => {
+    router.push(`/project?path=${encodeURIComponent(project.path)}`);
   };
 
   return (
@@ -123,15 +171,42 @@ export default function HomePage() {
               Recent projects
             </h2>
             <button className="text-gray-500 text-sm hover:text-gray-400">
-              View all (0)
+              View all ({recentProjects.length})
             </button>
           </div>
-          <div className="bg-gray-800/50 rounded-lg p-8 text-center">
-            <p className="text-gray-500">No recent projects yet</p>
-            <p className="text-gray-600 text-sm mt-2">
-              Open a project to get started
-            </p>
-          </div>
+          {recentProjects.length > 0 ? (
+            <div className="space-y-2">
+              {recentProjects.map((project) => (
+                <button
+                  key={project.path}
+                  onClick={() => handleProjectClick(project)}
+                  className="w-full bg-gray-700 hover:bg-gray-600 rounded-lg p-4 text-left transition-colors group"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h3 className="text-white font-medium">{project.name}</h3>
+                      <p className="text-gray-400 text-sm mt-1">
+                        {project.framework} · {project.startCommand}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-gray-500 text-xs">{project.path}</p>
+                      <p className="text-gray-600 text-xs mt-1">
+                        Port {project.port}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-gray-800/50 rounded-lg p-8 text-center">
+              <p className="text-gray-500">No recent projects yet</p>
+              <p className="text-gray-600 text-sm mt-2">
+                Open a project to get started
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
