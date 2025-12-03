@@ -25,3 +25,12 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Electron window dragging */
+.draggable {
+  -webkit-app-region: drag;
+}
+
+.non-draggable {
+  -webkit-app-region: no-drag;
+}

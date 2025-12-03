@@ -5,6 +5,7 @@ import { registerProjectHandlers } from "./ipc/project";
 import { registerServerHandlers } from "./ipc/server";
 import { registerFilesystemHandlers } from "./ipc/filesystem";
 import { registerBrowserViewHandlers } from "./ipc/browserview";
+import { registerWindowHandlers } from "./ipc/window";
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -24,6 +25,8 @@ async function createMainWindow() {
     minWidth: 1000,
     minHeight: 700,
     title: "Through - Project Analyzer",
+    frame: false,
+    titleBarStyle: "hidden",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       ...SECURITY_CONFIG,
