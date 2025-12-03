@@ -5,7 +5,6 @@ import { registerProjectHandlers } from "./ipc/project";
 import { registerServerHandlers } from "./ipc/server";
 import { registerFilesystemHandlers } from "./ipc/filesystem";
 import { registerBrowserViewHandlers } from "./ipc/browserview";
-import { registerWindowHandlers } from "./ipc/window";
 
 // Security configuration
 const SECURITY_CONFIG = {
