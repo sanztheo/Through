@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
+import { Terminal } from "lucide-react";
 
 function ProjectContent() {
   const router = useRouter();
@@ -18,6 +19,7 @@ function ProjectContent() {
   const [logs, setLogs] = useState<string[]>([]);
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [browserViewReady, setBrowserViewReady] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -78,6 +80,45 @@ function ProjectContent() {
       }
     };
   }, [api]);
+
+  // Update BrowserView bounds when terminal sidebar opens/closes
+  useEffect(() => {
+    const updateBrowserViewBounds = async () => {
+      if (
+        !api?.setBrowserViewBounds ||
+        !previewContainerRef.current ||
+        !browserViewReady
+      )
+        return;
+
+      try {
+        const container = previewContainerRef.current;
+        const rect = container.getBoundingClientRect();
+
+        // Calculate bounds - shift right if terminal is open (384px is sidebar width)
+        const xOffset = showTerminal ? 384 : 0;
+        const widthReduction = showTerminal ? 384 : 0;
+
+        await api.setBrowserViewBounds({
+          x: Math.round(rect.left + xOffset),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width - widthReduction),
+          height: Math.round(rect.height),
+        });
+
+        console.log("📐 Updated BrowserView bounds:", {
+          x: Math.round(rect.left + xOffset),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width - widthReduction),
+          height: Math.round(rect.height),
+        });
+      } catch (error) {
+        console.error("Failed to update BrowserView bounds:", error);
+      }
+    };
+
+    updateBrowserViewBounds();
+  }, [showTerminal, browserViewReady, api]);
 
   // Navigate BrowserView when both ready and server URL is available
   useEffect(() => {
@@ -194,16 +235,16 @@ function ProjectContent() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#1e293b]">
+    <div className="flex flex-col h-screen bg-white relative">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-gray-700">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-white z-10">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => router.push("/")}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="text-gray-600 hover:text-gray-900 transition-colors"
           >
             <svg
-              className="w-6 h-6"
+              className="w-5 h-5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -217,28 +258,28 @@ function ProjectContent() {
             </svg>
           </button>
           <div>
-            <h1 className="text-white font-semibold text-lg">
+            <h1 className="text-gray-900 font-semibold text-sm">
               {projectInfo.name}
             </h1>
-            <p className="text-gray-400 text-sm">
+            <p className="text-gray-500 text-[10px]">
               {projectInfo.framework} · Port {projectInfo.port}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5">
             <div
-              className={`w-2 h-2 rounded-full ${
+              className={`w-1.5 h-1.5 rounded-full ${
                 serverStatus === "running"
                   ? "bg-green-500"
                   : serverStatus === "starting"
                     ? "bg-yellow-500 animate-pulse"
                     : serverStatus === "error"
                       ? "bg-red-500"
-                      : "bg-gray-500"
+                      : "bg-gray-400"
               }`}
             />
-            <span className="text-sm text-gray-400">
+            <span className="text-[10px] text-gray-600 font-medium">
               {serverStatus === "running"
                 ? "Running"
                 : serverStatus === "starting"
@@ -248,90 +289,106 @@ function ProjectContent() {
                     : "Idle"}
             </span>
           </div>
-          {serverStatus === "running" && (
-            <button
-              onClick={stopServer}
-              className="px-3 py-1 text-sm bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors"
-            >
-              Stop
-            </button>
-          )}
+          <button
+            onClick={() => setShowTerminal(!showTerminal)}
+            className={`p-1.5 rounded-md transition-colors ${
+              showTerminal
+                ? "bg-gray-200 text-gray-900"
+                : "bg-white hover:bg-gray-100 text-gray-600"
+            }`}
+            title="Toggle Terminal"
+          >
+            <Terminal className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* Main Content - Split View */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left: Terminal Output */}
-        <div className="w-1/3 border-r border-gray-700 flex flex-col">
-          <div className="p-4 border-b border-gray-700">
-            <h2 className="text-white font-medium">Terminal</h2>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 bg-gray-900 font-mono text-sm">
-            {logs.map((log, index) => (
-              <div key={index} className="text-gray-300 mb-1">
-                {log}
+      {/* Main Content - Full Screen Preview */}
+      <div className="flex-1 relative overflow-hidden">
+        {/* Browser Preview */}
+        <div ref={previewContainerRef} className="absolute inset-0 bg-white">
+          {!browserViewReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+              <div className="text-center">
+                <svg
+                  className="w-16 h-16 mx-auto mb-4 text-gray-400 animate-pulse"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p className="text-gray-600">Initializing preview...</p>
               </div>
-            ))}
-            {logs.length === 0 && (
-              <div className="text-gray-500">
-                No logs yet. Start the server to see output.
+            </div>
+          )}
+          {browserViewReady && !serverUrl && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
+              <div className="text-center">
+                <svg
+                  className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                <p className="text-gray-600">Waiting for server...</p>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Right: Embedded Preview */}
-        <div className="flex-1 flex flex-col">
-          <div className="p-4 border-b border-gray-700">
-            <h2 className="text-white font-medium">Preview</h2>
-            {serverUrl && (
-              <p className="text-gray-400 text-xs mt-1">{serverUrl}</p>
-            )}
-          </div>
-          <div
-            ref={previewContainerRef}
-            className="flex-1 bg-gray-900 relative"
-          >
-            {!browserViewReady && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <svg
-                    className="w-16 h-16 mx-auto mb-4 text-gray-600 animate-pulse"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-gray-400">Initializing preview...</p>
+        {/* Terminal Sidebar */}
+        <div
+          className={`absolute top-0 left-0 h-full w-96 bg-gray-50 border-r border-gray-200 transition-transform duration-300 ease-in-out z-20 shadow-xl ${
+            showTerminal ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
+              <h2 className="text-gray-900 font-semibold text-sm">Terminal</h2>
+              <button
+                onClick={() => setShowTerminal(false)}
+                className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-md hover:bg-gray-100"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-white">
+              {logs.map((log, index) => (
+                <div key={index} className="text-gray-800 mb-1 leading-relaxed">
+                  {log}
                 </div>
-              </div>
-            )}
-            {browserViewReady && !serverUrl && (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center">
-                  <svg
-                    className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-gray-400">Waiting for server...</p>
+              ))}
+              {logs.length === 0 && (
+                <div className="text-gray-400 text-sm">
+                  No logs yet. Start the server to see output.
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
