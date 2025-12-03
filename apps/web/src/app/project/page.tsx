@@ -100,6 +100,34 @@ function ProjectContent() {
     navigateToServer();
   }, [browserViewReady, serverUrl, api?.navigateBrowserView]);
 
+  // Set up server event listeners ONCE when component mounts (to avoid race condition)
+  useEffect(() => {
+    if (!api) return;
+
+    console.log("🎧 Setting up server event listeners");
+
+    // Listen for server ready event
+    if (api.onServerReady) {
+      api.onServerReady((server: any) => {
+        console.log("📡 Received server:ready event", server);
+        setServerStatus("running");
+        const url = `http://localhost:${server.port}`;
+        setServerUrl(url);
+        setLogs((prev) => [...prev, `✅ Server running at ${url}`]);
+      });
+    }
+
+    // Listen for server stopped event
+    if (api.onServerStopped) {
+      api.onServerStopped((stoppedId: string) => {
+        console.log("📡 Received server:stopped event", stoppedId);
+        setServerStatus("idle");
+        setServerUrl(null);
+        setLogs((prev) => [...prev, "Server stopped"]);
+      });
+    }
+  }, [api]);
+
   // Auto-start server when project info is loaded
   useEffect(() => {
     if (projectInfo && api && serverStatus === "idle") {
@@ -130,30 +158,7 @@ function ProjectContent() {
       );
 
       setServerId(result.id);
-
-      // Listen for server ready event
-      if (api.onServerReady) {
-        api.onServerReady(async (server: any) => {
-          if (server.id === result.id) {
-            setServerStatus("running");
-            const url = `http://localhost:${server.port}`;
-            setServerUrl(url);
-            setLogs((prev) => [...prev, `✅ Server running at ${url}`]);
-            // Navigation will be handled by the useEffect that watches browserViewReady and serverUrl
-          }
-        });
-      }
-
-      // Listen for server stopped event
-      if (api.onServerStopped) {
-        api.onServerStopped((stoppedId: string) => {
-          if (stoppedId === result.id) {
-            setServerStatus("idle");
-            setServerUrl(null);
-            setLogs((prev) => [...prev, "Server stopped"]);
-          }
-        });
-      }
+      // Event listeners are set up in a separate useEffect to avoid race conditions
     } catch (err) {
       setServerStatus("error");
       setLogs((prev) => [
