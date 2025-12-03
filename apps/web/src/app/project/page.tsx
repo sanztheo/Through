@@ -16,10 +16,14 @@ function ProjectContent() {
   >("idle");
   const [serverId, setServerId] = useState<string | null>(null);
   const [serverUrl, setServerUrl] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
+  const [serverLogs, setServerLogs] = useState<string[]>([]);
+  const [devToolsLogs, setDevToolsLogs] = useState<
+    Array<{ message: string; type: string; source: string; line: number }>
+  >([]);
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
+  const [activeTab, setActiveTab] = useState<"server" | "devtools">("server");
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

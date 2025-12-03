@@ -29,6 +29,14 @@ export interface ElectronAPI {
   onServerLog: (
     callback: (logData: { id: string; log: string; type: string }) => void,
   ) => void;
+  onBrowserConsoleLog: (
+    callback: (logData: {
+      message: string;
+      type: string;
+      source: string;
+      line: number;
+    }) => void,
+  ) => void;
 
   // BrowserView operations for embedded preview
   createBrowserView: (bounds: {

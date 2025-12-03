@@ -39,6 +39,34 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
           height: true,
         });
 
+        // Listen for console messages from the browser
+        previewView.webContents.on(
+          "console-message",
+          (event, level, message, line, sourceId) => {
+            // level: 0 = log, 1 = warning, 2 = error, 3 = debug, 4 = info
+            const logType =
+              level === 2
+                ? "error"
+                : level === 1
+                  ? "warning"
+                  : level === 3
+                    ? "debug"
+                    : level === 4
+                      ? "info"
+                      : "log";
+
+            const logData = {
+              message,
+              type: logType,
+              source: sourceId,
+              line,
+            };
+
+            console.log("🌐 Browser console:", logData);
+            mainWindow.webContents.send("browser:console-log", logData);
+          },
+        );
+
         console.log("✅ BrowserView created successfully");
         return { success: true };
       } catch (error: any) {

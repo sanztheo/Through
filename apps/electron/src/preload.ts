@@ -33,6 +33,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
       callback(logData);
     });
   },
+  onBrowserConsoleLog: (
+    callback: (logData: {
+      message: string;
+      type: string;
+      source: string;
+      line: number;
+    }) => void,
+  ) => {
+    ipcRenderer.on("browser:console-log", (_, logData) => {
+      console.log("📥 Preload received browser:console-log event:", logData);
+      callback(logData);
+    });
+  },
 
   // BrowserView operations for embedded preview
   createBrowserView: (bounds: {
