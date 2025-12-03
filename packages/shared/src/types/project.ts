@@ -1,11 +1,11 @@
 export interface FileAnalysis {
-  has_package_json: boolean;
-  has_cargo_toml: boolean;
-  has_requirements_txt: boolean;
-  has_gemfile: boolean;
+  hasPackageJson: boolean;
+  hasCargoToml: boolean;
+  hasRequirementsTxt: boolean;
+  hasGemfile: boolean;
   dependencies: string[];
-  file_count: number;
-  total_size: number;
+  fileCount: number;
+  totalSize: number;
 }
 
 export interface ProjectDetection {

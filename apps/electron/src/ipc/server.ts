@@ -3,6 +3,7 @@ import { ServerManager } from "../services/ServerManager";
 
 export function registerServerHandlers() {
   const serverManager = new ServerManager();
+  let mainWindowWebContents: Electron.WebContents | null = null;
 
   ipcMain.handle(
     "server:start",
@@ -10,6 +11,7 @@ export function registerServerHandlers() {
       event,
       data: { projectPath: string; command: string; port: number },
     ) => {
+      mainWindowWebContents = event.sender;
       console.log(`IPC: Starting server for ${data.projectPath}`);
       const server = await serverManager.startServer(
         data.projectPath,
@@ -37,11 +39,15 @@ export function registerServerHandlers() {
 
   // Forward server events to renderer
   serverManager.on("server:ready", (server) => {
-    event.sender.send("server:ready", server);
+    if (mainWindowWebContents) {
+      mainWindowWebContents.send("server:ready", server);
+    }
   });
 
   serverManager.on("server:stopped", (serverId) => {
-    event.sender.send("server:stopped", serverId);
+    if (mainWindowWebContents) {
+      mainWindowWebContents.send("server:stopped", serverId);
+    }
   });
 
   // Stop all servers on app quit

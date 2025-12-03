@@ -16,7 +16,7 @@ export class ProjectAnalyzer {
     console.log("Step 1: Analyzing files with Rust NAPI...");
     const fileAnalysis = analyzeProjectFiles(projectPath);
     console.log(
-      `Found ${fileAnalysis.file_count} files, ${fileAnalysis.dependencies.length} dependencies`,
+      `Found ${fileAnalysis.fileCount} files, ${fileAnalysis.dependencies.length} dependencies`,
     );
 
     // Step 2: AI-powered project detection (OpenAI)
@@ -34,8 +34,8 @@ export class ProjectAnalyzer {
       detection,
       analyzedAt: new Date().toISOString(),
       fileAnalysis: {
-        fileCount: fileAnalysis.file_count,
-        totalSize: fileAnalysis.total_size,
+        fileCount: fileAnalysis.fileCount,
+        totalSize: fileAnalysis.totalSize,
         dependencies: fileAnalysis.dependencies,
       },
     };

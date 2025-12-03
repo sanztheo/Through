@@ -1,8 +1,4 @@
-import {
-  spawn_dev_server,
-  kill_process,
-  is_port_available,
-} from "@through/native";
+import { spawnDevServer, killProcess, isPortAvailable } from "@through/native";
 import { EventEmitter } from "events";
 import type { ServerInstance } from "@through/shared";
 
@@ -23,7 +19,7 @@ export class ServerManager extends EventEmitter {
 
     try {
       // Spawn using Rust NAPI
-      const handle = spawn_dev_server(projectPath, cmd, args);
+      const handle = spawnDevServer(projectPath, cmd, args);
 
       const instance: ServerInstance = {
         id,
@@ -59,7 +55,7 @@ export class ServerManager extends EventEmitter {
     }
 
     console.log(`Stopping server ${id} (PID ${server.pid})`);
-    kill_process(server.pid);
+    killProcess(server.pid);
     server.status = "stopped";
 
     this.servers.delete(id);
@@ -74,7 +70,7 @@ export class ServerManager extends EventEmitter {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
-      const available = is_port_available(port);
+      const available = isPortAvailable(port);
       if (!available) {
         // Port is now occupied, server is ready
         return;

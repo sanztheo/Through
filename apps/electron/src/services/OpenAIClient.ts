@@ -60,12 +60,12 @@ Analyze this project and determine how to launch its development server:
 Project Path: ${projectPath}
 
 File Analysis:
-- Has package.json: ${fileAnalysis.has_package_json}
-- Has Cargo.toml: ${fileAnalysis.has_cargo_toml}
-- Has requirements.txt: ${fileAnalysis.has_requirements_txt}
-- Has Gemfile: ${fileAnalysis.has_gemfile}
+- Has package.json: ${fileAnalysis.hasPackageJson}
+- Has Cargo.toml: ${fileAnalysis.hasCargoToml}
+- Has requirements.txt: ${fileAnalysis.hasRequirementsTxt}
+- Has Gemfile: ${fileAnalysis.hasGemfile}
 - Dependencies found: ${fileAnalysis.dependencies.join(", ")}
-- File count: ${fileAnalysis.file_count}
+- File count: ${fileAnalysis.fileCount}
 
 Determine:
 1. Framework/tool (Next.js, Vite, Create React App, Vue, Angular, etc.)

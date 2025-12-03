@@ -9,18 +9,18 @@
   ],
   "scripts": {
     "dev": "concurrently \"npm run dev:web\" \"npm run dev:electron\"",
-    "dev:web": "npm run dev --workspace=apps/web",
-    "dev:electron": "npm run dev --workspace=apps/electron",
+    "dev:web": "npm run dev -w apps/web",
+    "dev:electron": "npm run dev -w apps/electron",
     "build": "npm run build:native && npm run build:web && npm run build:electron",
-    "build:native": "npm run build --workspace=packages/native",
-    "build:web": "npm run build --workspace=apps/web",
-    "build:electron": "npm run build --workspace=apps/electron",
-    "start": "npm run start --workspace=apps/electron",
+    "build:native": "npm run build -w packages/native",
+    "build:web": "npm run build -w apps/web",
+    "build:electron": "npm run build -w apps/electron",
+    "start": "npm run start -w apps/electron",
     "clean": "npm run clean:electron && npm run clean:web && npm run clean:native",
-    "clean:electron": "npm run clean --workspace=apps/electron",
-    "clean:web": "npm run clean --workspace=apps/web",
+    "clean:electron": "npm run clean -w apps/electron",
+    "clean:web": "npm run clean -w apps/web",
     "clean:native": "cargo clean --manifest-path=packages/native/Cargo.toml",
-    "typecheck": "npm run typecheck --workspace=apps/electron && npm run typecheck --workspace=apps/web"
+    "typecheck": "npm run typecheck -w apps/electron && npm run typecheck -w apps/web"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
