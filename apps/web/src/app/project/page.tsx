@@ -20,7 +20,7 @@ function ProjectContent() {
   const [chromiumInstance, setChromiumInstance] = useState<any>(null);
 
   useEffect(() => {
-    if (!projectPath) return;
+    if (!projectPath || typeof window === "undefined") return;
 
     // Load project info from localStorage
     const stored = localStorage.getItem("recentProjects");

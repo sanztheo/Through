@@ -22,6 +22,7 @@ export default function HomePage() {
   const [recentProjects, setRecentProjects] = useState<ProjectInfo[]>([]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
     const stored = localStorage.getItem("recentProjects");
     if (stored) {
       setRecentProjects(JSON.parse(stored));
@@ -34,7 +35,9 @@ export default function HomePage() {
       ...recentProjects.filter((p) => p.path !== project.path),
     ].slice(0, 10);
     setRecentProjects(updated);
-    localStorage.setItem("recentProjects", JSON.stringify(updated));
+    if (typeof window !== "undefined") {
+      localStorage.setItem("recentProjects", JSON.stringify(updated));
+    }
   };
 
   const handleOpenProject = async () => {
