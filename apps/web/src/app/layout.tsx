@@ -13,6 +13,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.global = window;`,
+          }}
+        />
+      </head>
       <body className="antialiased">{children}</body>
     </html>
   );

@@ -11,15 +11,19 @@ const nextConfig = {
     if (!isServer) {
       config.target = 'electron-renderer';
 
-      // Fix "global is not defined" error in Electron
+      // Fix Node.js globals not defined in browser/Electron renderer
       config.resolve.fallback = {
         ...config.resolve.fallback,
         global: false,
+        __dirname: false,
+        __filename: false,
       };
 
       config.plugins.push(
         new (require('webpack')).DefinePlugin({
           'global': 'window',
+          '__dirname': '"/"',
+          '__filename': '""',
         })
       );
     }

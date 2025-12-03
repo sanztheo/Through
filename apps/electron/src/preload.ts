@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 
+// Fix "global is not defined" error in Electron renderer
+(globalThis as any).global = globalThis;
+
 // Expose safe, curated API to renderer
 contextBridge.exposeInMainWorld("electronAPI", {
   // Project operations
