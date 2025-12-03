@@ -1,5 +1,5 @@
 import {
-  spawnDevServer,
+  spawnDevServerWithLogs,
   killProcess,
   isPortAvailable,
   isPortListening,
@@ -7,11 +7,9 @@ import {
 } from "@through/native";
 import { EventEmitter } from "events";
 import type { ServerInstance } from "@through/shared";
-import { spawn, ChildProcess } from "child_process";
 
 export class ServerManager extends EventEmitter {
   private servers: Map<string, ServerInstance> = new Map();
-  private processes: Map<string, ChildProcess> = new Map();
 
   async startServer(
     projectPath: string,
@@ -52,52 +50,36 @@ export class ServerManager extends EventEmitter {
     }
 
     try {
-      // Spawn using Node.js child_process to capture stdout/stderr
-      const childProcess = spawn(cmd, args, {
-        cwd: projectPath,
-        shell: true,
-        env: { ...process.env, PORT: actualPort.toString() },
-      });
+      // Spawn using Rust NAPI with live log streaming
+      const handle = spawnDevServerWithLogs(
+        projectPath,
+        cmd,
+        args,
+        (log: string, isError: boolean) => {
+          // Emit log events to IPC
+          if (log.trim()) {
+            console.log(`[Server ${id}] ${log}`);
+            this.emit("server:log", {
+              id,
+              log: log.trim(),
+              type: isError ? "stderr" : "stdout",
+            });
+          }
+        },
+      );
 
       const instance: ServerInstance = {
         id,
         projectPath,
         command,
-        pid: childProcess.pid!,
+        pid: handle.pid,
         port: actualPort,
         status: "starting",
         startedAt: new Date(),
       };
 
       this.servers.set(id, instance);
-      this.processes.set(id, childProcess);
-      console.log(`Server started with PID ${childProcess.pid}`);
-
-      // Capture stdout logs
-      childProcess.stdout?.on("data", (data: Buffer) => {
-        const log = data.toString().trim();
-        if (log) {
-          console.log(`[Server ${id}] ${log}`);
-          this.emit("server:log", { id, log, type: "stdout" });
-        }
-      });
-
-      // Capture stderr logs
-      childProcess.stderr?.on("data", (data: Buffer) => {
-        const log = data.toString().trim();
-        if (log) {
-          console.error(`[Server ${id}] ${log}`);
-          this.emit("server:log", { id, log, type: "stderr" });
-        }
-      });
-
-      // Handle process exit
-      childProcess.on("exit", (code) => {
-        console.log(`Server ${id} exited with code ${code}`);
-        this.servers.delete(id);
-        this.processes.delete(id);
-        this.emit("server:stopped", id);
-      });
+      console.log(`Server started with PID ${handle.pid}`);
 
       // Wait for server to be ready (port becomes occupied)
       await this.waitForServerReady(actualPort);
@@ -115,7 +97,6 @@ export class ServerManager extends EventEmitter {
 
   async stopServer(id: string): Promise<void> {
     const server = this.servers.get(id);
-    const process = this.processes.get(id);
 
     if (!server) {
       throw new Error(`Server ${id} not found`);
@@ -123,13 +104,7 @@ export class ServerManager extends EventEmitter {
 
     console.log(`Stopping server ${id} (PID ${server.pid})`);
 
-    if (process) {
-      process.kill();
-      this.processes.delete(id);
-    } else {
-      // Fallback to killProcess if process not found
-      killProcess(server.pid);
-    }
+    killProcess(server.pid);
 
     server.status = "stopped";
     this.servers.delete(id);

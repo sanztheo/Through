@@ -1,13 +1,23 @@
 use napi::bindgen_prelude::*;
+use napi::threadsafe_function::{ErrorStrategy, ThreadsafeFunction, ThreadsafeFunctionCallMode};
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
+use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
+use std::thread;
 
 #[napi(object)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessHandle {
     pub pid: u32,
     pub command: String,
+}
+
+#[derive(Clone)]
+pub struct LogData {
+    pub log: String,
+    pub is_error: bool,
 }
 
 /// Spawn a development server process
@@ -69,6 +79,110 @@ pub fn spawn_dev_server(
 
     // Detach the child process so it continues running independently
     // We're not waiting for it to complete
+    std::mem::forget(child);
+
+    let full_command = format!("{} {}", command, args.join(" "));
+
+    Ok(ProcessHandle {
+        pid,
+        command: full_command,
+    })
+}
+
+/// Spawn a development server process with live log streaming
+///
+/// # Arguments
+/// * `project_path` - Working directory for the process
+/// * `command` - Command to execute (e.g., "npm", "cargo", "python")
+/// * `args` - Array of command arguments
+/// * `on_log` - Callback function for streaming logs
+///
+/// # Returns
+/// * `Result<ProcessHandle>` - Handle to the spawned process including PID
+#[napi(ts_args_type = "projectPath: string, command: string, args: Array<string>, onLog: (log: string, isError: boolean) => void")]
+pub fn spawn_dev_server_with_logs(
+    project_path: String,
+    command: String,
+    args: Vec<String>,
+    on_log: JsFunction,
+) -> Result<ProcessHandle> {
+    // Validate project path exists
+    let path = std::path::Path::new(&project_path);
+    if !path.exists() {
+        return Err(Error::new(
+            Status::InvalidArg,
+            format!("Project path does not exist: {}", project_path),
+        ));
+    }
+
+    if !path.is_dir() {
+        return Err(Error::new(
+            Status::InvalidArg,
+            format!("Project path is not a directory: {}", project_path),
+        ));
+    }
+
+    // Create threadsafe function for logging
+    let tsfn: ThreadsafeFunction<LogData, ErrorStrategy::Fatal> = on_log
+        .create_threadsafe_function(0, |ctx| {
+            let log_data: LogData = ctx.value;
+            let log_str = ctx.env.create_string(&log_data.log)?;
+            let is_error_bool = ctx.env.get_boolean(log_data.is_error)?;
+            Ok(vec![log_str.into_unknown(), is_error_bool.into_unknown()])
+        })?;
+
+    // Spawn the process with proper I/O handling
+    let mut child = Command::new(&command)
+        .args(&args)
+        .current_dir(&project_path)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn()
+        .map_err(|e| {
+            Error::new(
+                Status::GenericFailure,
+                format!("Failed to spawn process '{}': {}", command, e),
+            )
+        })?;
+
+    let pid = child.id();
+
+    // Capture stdout in a separate thread
+    if let Some(stdout) = child.stdout.take() {
+        let tsfn_stdout = Arc::new(tsfn.clone());
+        thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let log_data = LogData {
+                        log: line,
+                        is_error: false,
+                    };
+                    let _ = tsfn_stdout.call(log_data, ThreadsafeFunctionCallMode::NonBlocking);
+                }
+            }
+        });
+    }
+
+    // Capture stderr in a separate thread
+    if let Some(stderr) = child.stderr.take() {
+        let tsfn_stderr = Arc::new(tsfn);
+        thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    let log_data = LogData {
+                        log: line,
+                        is_error: true,
+                    };
+                    let _ = tsfn_stderr.call(log_data, ThreadsafeFunctionCallMode::NonBlocking);
+                }
+            }
+        });
+    }
+
+    // Detach the child process so it continues running independently
     std::mem::forget(child);
 
     let full_command = format!("{} {}", command, args.join(" "));
