@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 
@@ -9,6 +9,7 @@ function ProjectContent() {
   const searchParams = useSearchParams();
   const projectPath = searchParams.get("path");
   const { api } = useElectronAPI();
+  const webviewRef = useRef<any>(null);
 
   const [serverStatus, setServerStatus] = useState<
     "idle" | "starting" | "running" | "error"
@@ -17,6 +18,7 @@ function ProjectContent() {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [projectInfo, setProjectInfo] = useState<any>(null);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -98,6 +100,25 @@ function ProjectContent() {
       ]);
     }
   };
+
+  const toggleDevTools = () => {
+    if (webviewRef.current) {
+      if (devToolsOpen) {
+        webviewRef.current.closeDevTools();
+      } else {
+        webviewRef.current.openDevTools();
+      }
+      setDevToolsOpen(!devToolsOpen);
+    }
+  };
+
+  // Create webview element when serverUrl changes
+  useEffect(() => {
+    if (!serverUrl || !webviewRef.current) return;
+
+    const webview = webviewRef.current as HTMLElement;
+    webview.setAttribute("src", serverUrl);
+  }, [serverUrl]);
 
   if (!projectPath || !projectInfo) {
     return (
@@ -192,16 +213,27 @@ function ProjectContent() {
         <div className="flex-1 flex flex-col">
           <div className="p-4 border-b border-gray-700 flex items-center justify-between">
             <h2 className="text-white font-medium">Preview</h2>
-            {serverUrl && (
-              <div className="text-gray-400 text-sm">{serverUrl}</div>
-            )}
+            <div className="flex items-center gap-4">
+              {serverUrl && (
+                <>
+                  <div className="text-gray-400 text-sm">{serverUrl}</div>
+                  <button
+                    onClick={toggleDevTools}
+                    className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white text-sm rounded transition-colors"
+                    title="Toggle DevTools"
+                  >
+                    {devToolsOpen ? "Close" : "Inspect"} 🔍
+                  </button>
+                </>
+              )}
+            </div>
           </div>
-          <div className="flex-1 bg-white">
+          <div className="flex-1 bg-white relative">
             {serverUrl ? (
-              <iframe
-                src={serverUrl}
-                className="w-full h-full border-0"
-                title="Localhost Preview"
+              <webview
+                ref={webviewRef}
+                className="w-full h-full"
+                style={{ position: "absolute", inset: 0 }}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
