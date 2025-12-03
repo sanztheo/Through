@@ -38,7 +38,7 @@ export function registerServerHandlers() {
   });
 
   // Forward server events to renderer
-  serverManager.on("server:ready", (server) => {
+  serverManager.on("server:ready", async (server) => {
     if (mainWindowWebContents) {
       mainWindowWebContents.send("server:ready", server);
     }

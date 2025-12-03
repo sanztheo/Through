@@ -17,7 +17,8 @@ function ProjectContent() {
   const [serverUrl, setServerUrl] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [projectInfo, setProjectInfo] = useState<any>(null);
-  const [chromiumId, setChromiumId] = useState<string | null>(null);
+  const [browserViewReady, setBrowserViewReady] = useState(false);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
@@ -33,35 +34,71 @@ function ProjectContent() {
     }
   }, [projectPath]);
 
-  // Launch Chromium and navigate when server is ready
+  // Initialize BrowserView for embedded preview
   useEffect(() => {
-    const launchAndNavigate = async () => {
-      if (!serverUrl || !api?.launchChromium || !api?.navigateChromium) return;
-      if (chromiumId) return; // Already launched
+    const initBrowserView = async () => {
+      if (!api?.createBrowserView || !previewContainerRef.current) return;
 
       try {
-        setLogs((prev) => [...prev, "🚀 Launching Chromium browser..."]);
-        const instance = await api.launchChromium({
-          width: 1400,
-          height: 900,
-          headless: false,
+        const container = previewContainerRef.current;
+        const rect = container.getBoundingClientRect();
+
+        console.log("🌐 Initializing BrowserView with bounds:", {
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
         });
 
-        setChromiumId(instance.id);
-        setLogs((prev) => [...prev, `✅ Chromium launched: ${instance.id}`]);
+        await api.createBrowserView({
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
 
-        // Navigate to server URL
-        setLogs((prev) => [...prev, `🌐 Navigating to ${serverUrl}...`]);
-        await api.navigateChromium(instance.id, serverUrl);
-        setLogs((prev) => [...prev, `✅ Navigated to ${serverUrl}`]);
+        setBrowserViewReady(true);
+        setLogs((prev) => [...prev, "✅ Embedded preview initialized"]);
       } catch (error) {
-        console.error("Failed to launch Chromium:", error);
-        setLogs((prev) => [...prev, `❌ Chromium error: ${error}`]);
+        console.error("Failed to create BrowserView:", error);
+        setLogs((prev) => [
+          ...prev,
+          `❌ Failed to create preview: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ]);
       }
     };
 
-    launchAndNavigate();
-  }, [serverUrl, api, chromiumId]);
+    // Small delay to ensure container is rendered
+    const timer = setTimeout(initBrowserView, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (api?.destroyBrowserView) {
+        api.destroyBrowserView().catch(console.error);
+      }
+    };
+  }, [api]);
+
+  // Navigate BrowserView when both ready and server URL is available
+  useEffect(() => {
+    const navigateToServer = async () => {
+      if (!browserViewReady || !serverUrl || !api?.navigateBrowserView) return;
+
+      try {
+        console.log(`🔗 Navigating embedded preview to ${serverUrl}`);
+        await api.navigateBrowserView(serverUrl);
+        setLogs((prev) => [...prev, `✅ Preview loaded: ${serverUrl}`]);
+      } catch (error) {
+        console.error("Failed to navigate BrowserView:", error);
+        setLogs((prev) => [
+          ...prev,
+          `❌ Failed to load preview: ${error instanceof Error ? error.message : "Unknown error"}`,
+        ]);
+      }
+    };
+
+    navigateToServer();
+  }, [browserViewReady, serverUrl, api?.navigateBrowserView]);
 
   // Auto-start server when project info is loaded
   useEffect(() => {
@@ -238,40 +275,21 @@ function ProjectContent() {
           </div>
         </div>
 
-        {/* Right: Chromium Browser Status */}
+        {/* Right: Embedded Preview */}
         <div className="flex-1 flex flex-col">
           <div className="p-4 border-b border-gray-700">
-            <h2 className="text-white font-medium">Chromium Browser</h2>
+            <h2 className="text-white font-medium">Preview</h2>
+            {serverUrl && (
+              <p className="text-gray-400 text-xs mt-1">{serverUrl}</p>
+            )}
           </div>
-          <div className="flex-1 flex items-center justify-center bg-gray-900">
-            <div className="text-center">
-              {chromiumId ? (
-                <>
-                  <svg
-                    className="w-16 h-16 mx-auto mb-4 text-green-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  <p className="text-white font-medium mb-2">
-                    🚀 Chromium Browser Active
-                  </p>
-                  <p className="text-gray-400 text-sm mb-1">
-                    Running at: {serverUrl}
-                  </p>
-                  <p className="text-gray-500 text-xs">
-                    Browser ID: {chromiumId}
-                  </p>
-                </>
-              ) : (
-                <>
+          <div
+            ref={previewContainerRef}
+            className="flex-1 bg-gray-900 relative"
+          >
+            {!browserViewReady && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
                   <svg
                     className="w-16 h-16 mx-auto mb-4 text-gray-600 animate-pulse"
                     fill="none"
@@ -285,10 +303,30 @@ function ProjectContent() {
                       d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                     />
                   </svg>
+                  <p className="text-gray-400">Initializing preview...</p>
+                </div>
+              </div>
+            )}
+            {browserViewReady && !serverUrl && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="text-center">
+                  <svg
+                    className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
                   <p className="text-gray-400">Waiting for server...</p>
-                </>
-              )}
-            </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

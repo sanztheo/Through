@@ -26,13 +26,27 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("server:stopped", (_, serverId) => callback(serverId));
   },
 
-  // Chromium browser operations
-  launchChromium: (config?: any) =>
-    ipcRenderer.invoke("chromium:launch", config),
-  navigateChromium: (instanceId: string, url: string) =>
-    ipcRenderer.invoke("chromium:navigate", { instanceId, url }),
-  closeChromium: (instanceId: string) =>
-    ipcRenderer.invoke("chromium:close", instanceId),
+  // BrowserView operations for embedded preview
+  createBrowserView: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => ipcRenderer.invoke("browserview:create", bounds),
+  navigateBrowserView: (url: string) =>
+    ipcRenderer.invoke("browserview:navigate", url),
+  setBrowserViewBounds: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => ipcRenderer.invoke("browserview:set-bounds", bounds),
+  openBrowserViewDevTools: () =>
+    ipcRenderer.invoke("browserview:open-devtools"),
+  closeBrowserViewDevTools: () =>
+    ipcRenderer.invoke("browserview:close-devtools"),
+  destroyBrowserView: () => ipcRenderer.invoke("browserview:destroy"),
+  reloadBrowserView: () => ipcRenderer.invoke("browserview:reload"),
 
   // Filesystem operations
   readFile: (filePath: string) => ipcRenderer.invoke("fs:read-file", filePath),
