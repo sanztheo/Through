@@ -131,13 +131,19 @@ pub fn spawn_dev_server_with_logs(
             Ok(vec![log_str.into_unknown(), is_error_bool.into_unknown()])
         })?;
 
-    // Spawn the process with proper I/O handling
+    // Spawn the process with proper I/O handling and unbuffered output
     let mut child = Command::new(&command)
         .args(&args)
         .current_dir(&project_path)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .stdin(Stdio::null())
+        // Force unbuffered output for real-time log streaming
+        .env("FORCE_COLOR", "1")
+        .env("NODE_ENV", "development")
+        .env("PYTHONUNBUFFERED", "1")
+        .env("RUST_BACKTRACE", "1")
+        .env("CI", "false")
         .spawn()
         .map_err(|e| {
             Error::new(
@@ -148,35 +154,51 @@ pub fn spawn_dev_server_with_logs(
 
     let pid = child.id();
 
-    // Capture stdout in a separate thread
+    // Capture stdout in a separate thread with small buffer for real-time streaming
     if let Some(stdout) = child.stdout.take() {
         let tsfn_stdout = Arc::new(tsfn.clone());
         thread::spawn(move || {
-            let reader = BufReader::new(stdout);
+            // Use smaller buffer size (1KB) for more responsive streaming
+            let reader = BufReader::with_capacity(1024, stdout);
             for line in reader.lines() {
-                if let Ok(line) = line {
-                    let log_data = LogData {
-                        log: line,
-                        is_error: false,
-                    };
-                    let _ = tsfn_stdout.call(log_data, ThreadsafeFunctionCallMode::NonBlocking);
+                match line {
+                    Ok(line) => {
+                        let log_data = LogData {
+                            log: line,
+                            is_error: false,
+                        };
+                        // Use blocking mode to ensure logs are delivered
+                        let _ = tsfn_stdout.call(log_data, ThreadsafeFunctionCallMode::Blocking);
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading stdout: {}", e);
+                        break;
+                    }
                 }
             }
         });
     }
 
-    // Capture stderr in a separate thread
+    // Capture stderr in a separate thread with small buffer for real-time streaming
     if let Some(stderr) = child.stderr.take() {
         let tsfn_stderr = Arc::new(tsfn);
         thread::spawn(move || {
-            let reader = BufReader::new(stderr);
+            // Use smaller buffer size (1KB) for more responsive streaming
+            let reader = BufReader::with_capacity(1024, stderr);
             for line in reader.lines() {
-                if let Ok(line) = line {
-                    let log_data = LogData {
-                        log: line,
-                        is_error: true,
-                    };
-                    let _ = tsfn_stderr.call(log_data, ThreadsafeFunctionCallMode::NonBlocking);
+                match line {
+                    Ok(line) => {
+                        let log_data = LogData {
+                            log: line,
+                            is_error: true,
+                        };
+                        // Use blocking mode to ensure logs are delivered
+                        let _ = tsfn_stderr.call(log_data, ThreadsafeFunctionCallMode::Blocking);
+                    }
+                    Err(e) => {
+                        eprintln!("Error reading stderr: {}", e);
+                        break;
+                    }
                 }
             }
         });
