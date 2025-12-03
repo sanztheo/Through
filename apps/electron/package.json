@@ -1,0 +1,25 @@
+{
+  "name": "@through/electron",
+  "version": "0.1.0",
+  "description": "Electron main process for Through app",
+  "main": "build/main.js",
+  "private": true,
+  "scripts": {
+    "dev": "tsc && electron .",
+    "build": "tsc",
+    "start": "electron .",
+    "clean": "rm -rf build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@through/native": "*",
+    "@through/shared": "*",
+    "electron": "^28.0.0",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.3",
+    "electron": "^28.0.0"
+  }
+}

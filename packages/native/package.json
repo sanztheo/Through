@@ -1,0 +1,29 @@
+{
+  "name": "@through/native",
+  "version": "0.1.0",
+  "description": "Rust NAPI native modules for Through app",
+  "main": "index.node",
+  "types": "index.d.ts",
+  "private": true,
+  "napi": {
+    "name": "through-native",
+    "triples": {
+      "defaults": true,
+      "additional": [
+        "x86_64-apple-darwin",
+        "aarch64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "build:debug": "napi build --platform",
+    "artifacts": "napi artifacts",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^2.18.0"
+  }
+}
