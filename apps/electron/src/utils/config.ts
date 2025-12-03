@@ -1,6 +1,6 @@
 import path from "path";
-import fs from "fs";
 import { app } from "electron";
+import dotenv from "dotenv";
 
 export interface AppConfig {
   OPENAI_API_KEY: string;
@@ -14,19 +14,12 @@ let config: AppConfig | null = null;
 export function loadConfig(): AppConfig {
   if (config) return config;
 
-  // Load .env file in development
-  if (process.env.NODE_ENV === "development") {
-    const envPath = path.join(process.cwd(), ".env");
-    if (fs.existsSync(envPath)) {
-      const envContent = fs.readFileSync(envPath, "utf-8");
-      envContent.split("\n").forEach((line) => {
-        const [key, value] = line.split("=");
-        if (key && value) {
-          process.env[key.trim()] = value.trim();
-        }
-      });
-    }
-  }
+  // Load .env file from project root
+  const rootPath = path.join(__dirname, "../../../..");
+  const envPath = path.join(rootPath, ".env");
+  console.log(`Loading .env from: ${envPath}`);
+
+  dotenv.config({ path: envPath });
 
   // Validate required environment variables
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
