@@ -4,7 +4,7 @@ import { loadConfig } from "./utils/config";
 import { registerProjectHandlers } from "./ipc/project";
 import { registerServerHandlers } from "./ipc/server";
 import { registerFilesystemHandlers } from "./ipc/filesystem";
-import { registerBrowserViewHandlers } from "./ipc/browserview";
+import { registerChromiumHandlers } from "./ipc/chromium";
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -59,16 +59,12 @@ app.whenReady().then(async () => {
     registerProjectHandlers();
     registerServerHandlers();
     registerFilesystemHandlers();
+    registerChromiumHandlers();
     console.log("IPC handlers registered");
 
     // Create main window
     await createMainWindow();
     console.log("Main window created");
-
-    // Register BrowserView handlers after window is created
-    if (mainWindow) {
-      registerBrowserViewHandlers(mainWindow);
-    }
   } catch (error) {
     console.error("Failed to initialize app:", error);
     app.quit();
