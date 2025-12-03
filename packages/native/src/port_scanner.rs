@@ -73,10 +73,11 @@ pub fn is_port_listening(port: u16) -> Result<bool> {
         ));
     }
 
-    // Try to connect to localhost on the specified port
+    // Try to connect to localhost on the specified port (IPv4 and IPv6)
     let addrs = [
-        format!("127.0.0.1:{}", port),
-        format!("localhost:{}", port),
+        format!("127.0.0.1:{}", port),      // IPv4 loopback
+        format!("[::1]:{}", port),           // IPv6 loopback
+        format!("localhost:{}", port),       // DNS resolution fallback
     ];
 
     for addr_str in &addrs {

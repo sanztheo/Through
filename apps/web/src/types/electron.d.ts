@@ -27,16 +27,24 @@ export interface ElectronAPI {
   onServerReady: (callback: (server: ServerInstance) => void) => void;
   onServerStopped: (callback: (serverId: string) => void) => void;
 
-  // Chromium browser operations
-  launchChromium: (config?: ChromiumConfig) => Promise<ChromiumInstance>;
-  navigateChromium: (instanceId: string, url: string) => Promise<boolean>;
-  executeChromiumJs: (instanceId: string, script: string) => Promise<string>;
-  takeChromiumScreenshot: (
-    instanceId: string,
-    outputPath: string,
-  ) => Promise<string>;
-  getChromiumContent: (instanceId: string) => Promise<string>;
-  closeChromium: (instanceId: string) => Promise<boolean>;
+  // BrowserView operations for embedded preview
+  createBrowserView: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<{ success: boolean }>;
+  navigateBrowserView: (url: string) => Promise<{ success: boolean }>;
+  setBrowserViewBounds: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }) => Promise<{ success: boolean }>;
+  openBrowserViewDevTools: () => Promise<{ success: boolean }>;
+  closeBrowserViewDevTools: () => Promise<{ success: boolean }>;
+  reloadBrowserView: () => Promise<{ success: boolean }>;
+  destroyBrowserView: () => Promise<{ success: boolean }>;
 
   // Filesystem operations
   readFile: (
