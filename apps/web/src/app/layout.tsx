@@ -20,7 +20,16 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <div className="h-screen flex flex-col">
+          {/* Draggable zone for window - reserve space for macOS traffic lights */}
+          <div
+            className="h-10 draggable flex-shrink-0 bg-white"
+            style={{ paddingLeft: "80px" }}
+          />
+          <div className="flex-1 overflow-hidden">{children}</div>
+        </div>
+      </body>
     </html>
   );
 }

@@ -125,90 +125,81 @@ export default function HomePage() {
   };
 
   return (
-    <main className="min-h-screen bg-white flex flex-col font-sans">
-      {/* Draggable zone at top */}
-      <div className="h-10 draggable flex-shrink-0" />
-
-      <div className="flex-1 flex items-center justify-center p-12">
-        <div className="w-full max-w-4xl non-draggable">
-          <div className="flex flex-col items-center justify-center mb-16">
-            <div className="flex items-center gap-4 mb-3">
-              <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center">
-                <div className="w-6 h-6 bg-white rounded-full"></div>
-              </div>
-              <h1 className="text-5xl font-bold tracking-tight text-black">
-                Inspector
-              </h1>
+    <main className="h-full bg-white flex items-center justify-center p-12 font-sans">
+      <div className="w-full max-w-4xl non-draggable">
+        <div className="flex flex-col items-center justify-center mb-16">
+          <div className="flex items-center gap-4 mb-3">
+            <div className="w-12 h-12 bg-black rounded-full flex items-center justify-center">
+              <div className="w-6 h-6 bg-white rounded-full"></div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <button className="hover:text-gray-700 transition-colors">
-                Business
-              </button>
-              <span>·</span>
-              <button className="hover:text-gray-700 transition-colors">
-                Settings
-              </button>
-            </div>
+            <h1 className="text-5xl font-bold tracking-tight text-black">
+              Inspector
+            </h1>
           </div>
-
-          <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto mb-16">
-            <button
-              onClick={handleOpenProject}
-              disabled={!isElectron || isLoading}
-              className="bg-gray-50 hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 rounded-lg p-6 flex flex-col items-start gap-3 transition-colors"
-            >
-              <Folder className="w-6 h-6 text-gray-600" />
-              <span className="text-base font-medium text-black">
-                Open project
-              </span>
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <button className="hover:text-gray-700 transition-colors">
+              Business
             </button>
-
-            <button
-              disabled
-              className="bg-gray-50 cursor-not-allowed rounded-lg p-6 flex flex-col items-start gap-3 opacity-50"
-            >
-              <GitBranch className="w-6 h-6 text-gray-600" />
-              <span className="text-base font-medium text-black">
-                Clone repo
-              </span>
+            <span>·</span>
+            <button className="hover:text-gray-700 transition-colors">
+              Settings
             </button>
           </div>
-
-          {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
-              <p className="text-red-600 text-sm">{error}</p>
-            </div>
-          )}
-
-          {isLoading && (
-            <div className="bg-gray-50 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
-              <p className="text-gray-600 text-sm">Analyzing project...</p>
-            </div>
-          )}
-
-          <div className="max-w-2xl mx-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-sm font-medium text-black">
-                Recent projects
-              </h2>
-              <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                View all ({recentProjects.length})
-              </button>
-            </div>
-
-            <ProjectList
-              projects={recentProjects}
-              onProjectClick={handleProjectClick}
-              onProjectContextMenu={handleContextMenu}
-            />
-          </div>
-
-          {!isElectron && (
-            <div className="text-center text-gray-400 text-xs mt-8">
-              Please run this app in Electron
-            </div>
-          )}
         </div>
+
+        <div className="grid grid-cols-2 gap-4 max-w-2xl mx-auto mb-16">
+          <button
+            onClick={handleOpenProject}
+            disabled={!isElectron || isLoading}
+            className="bg-gray-50 hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 rounded-lg p-6 flex flex-col items-start gap-3 transition-colors"
+          >
+            <Folder className="w-6 h-6 text-gray-600" />
+            <span className="text-base font-medium text-black">
+              Open project
+            </span>
+          </button>
+
+          <button
+            disabled
+            className="bg-gray-50 cursor-not-allowed rounded-lg p-6 flex flex-col items-start gap-3 opacity-50"
+          >
+            <GitBranch className="w-6 h-6 text-gray-600" />
+            <span className="text-base font-medium text-black">Clone repo</span>
+          </button>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
+            <p className="text-red-600 text-sm">{error}</p>
+          </div>
+        )}
+
+        {isLoading && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 max-w-2xl mx-auto">
+            <p className="text-gray-600 text-sm">Analyzing project...</p>
+          </div>
+        )}
+
+        <div className="max-w-2xl mx-auto">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-sm font-medium text-black">Recent projects</h2>
+            <button className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              View all ({recentProjects.length})
+            </button>
+          </div>
+
+          <ProjectList
+            projects={recentProjects}
+            onProjectClick={handleProjectClick}
+            onProjectContextMenu={handleContextMenu}
+          />
+        </div>
+
+        {!isElectron && (
+          <div className="text-center text-gray-400 text-xs mt-8">
+            Please run this app in Electron
+          </div>
+        )}
       </div>
 
       {/* Context Menu */}
