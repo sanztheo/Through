@@ -1,9 +1,4 @@
-import type {
-  ProjectAnalysis,
-  ServerInstance,
-  ChromiumInstance,
-  ChromiumConfig,
-} from "@through/shared";
+import type { ProjectAnalysis, ServerInstance } from "@through/shared";
 
 export interface ElectronAPI {
   // Project operations
