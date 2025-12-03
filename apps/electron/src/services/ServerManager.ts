@@ -1,4 +1,9 @@
-import { spawnDevServer, killProcess, isPortAvailable } from "@through/native";
+import {
+  spawnDevServer,
+  killProcess,
+  isPortAvailable,
+  findAvailablePort,
+} from "@through/native";
 import { EventEmitter } from "events";
 import type { ServerInstance } from "@through/shared";
 
@@ -12,7 +17,21 @@ export class ServerManager extends EventEmitter {
   ): Promise<ServerInstance> {
     const id = this.generateServerId();
 
-    console.log(`Starting server: ${command} on port ${port}`);
+    // Check if requested port is available, find alternative if not
+    const requestedPort = port;
+    const portAvailable = isPortAvailable(requestedPort);
+
+    const actualPort = portAvailable
+      ? requestedPort
+      : findAvailablePort(requestedPort, requestedPort + 100);
+
+    if (actualPort !== requestedPort) {
+      console.log(
+        `Port ${requestedPort} is occupied, using port ${actualPort} instead`,
+      );
+    }
+
+    console.log(`Starting server: ${command} on port ${actualPort}`);
 
     // Parse command into executable and args
     const [cmd, ...args] = command.split(" ");
@@ -26,7 +45,7 @@ export class ServerManager extends EventEmitter {
         projectPath,
         command,
         pid: handle.pid,
-        port,
+        port: actualPort,
         status: "starting",
         startedAt: new Date(),
       };
@@ -35,11 +54,11 @@ export class ServerManager extends EventEmitter {
       console.log(`Server started with PID ${handle.pid}`);
 
       // Wait for server to be ready (port becomes occupied)
-      await this.waitForServerReady(port);
+      await this.waitForServerReady(actualPort);
 
       instance.status = "running";
       this.emit("server:ready", instance);
-      console.log(`Server ready on port ${port}`);
+      console.log(`Server ready on port ${actualPort}`);
 
       return instance;
     } catch (error: any) {
