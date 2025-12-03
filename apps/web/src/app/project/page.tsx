@@ -19,6 +19,7 @@ function ProjectContent() {
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
+  const browserViewInitialized = useRef(false);
 
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
@@ -38,6 +39,7 @@ function ProjectContent() {
   useEffect(() => {
     const initBrowserView = async () => {
       if (!api?.createBrowserView || !previewContainerRef.current) return;
+      if (browserViewInitialized.current) return; // Prevent duplicate creation
 
       try {
         // Get container bounds
@@ -53,6 +55,7 @@ function ProjectContent() {
           height: Math.round(rect.height),
         });
 
+        browserViewInitialized.current = true;
         setBrowserViewReady(true);
         setLogs((prev) => [...prev, "✅ Browser view ready"]);
       } catch (error) {
@@ -64,11 +67,12 @@ function ProjectContent() {
     // Wait a bit for layout to settle
     const timer = setTimeout(initBrowserView, 100);
 
-    // Cleanup on unmount
+    // Cleanup on unmount only
     return () => {
       clearTimeout(timer);
-      if (api?.destroyBrowserView) {
+      if (browserViewInitialized.current && api?.destroyBrowserView) {
         api.destroyBrowserView().catch(console.error);
+        browserViewInitialized.current = false;
       }
     };
   }, [api]);
@@ -103,16 +107,26 @@ function ProjectContent() {
 
   // Navigate BrowserView when both ready and server URL available
   useEffect(() => {
+    console.log("🔍 Navigation useEffect triggered", {
+      browserViewReady,
+      serverUrl,
+      hasNavigateAPI: !!api?.navigateBrowserView,
+    });
+
     const navigateToServer = async () => {
       if (browserViewReady && serverUrl && api?.navigateBrowserView) {
         try {
+          console.log("🚀 Attempting navigation to:", serverUrl);
           setLogs((prev) => [...prev, `🌐 Loading ${serverUrl}...`]);
           await api.navigateBrowserView(serverUrl);
+          console.log("✅ Navigation succeeded");
           setLogs((prev) => [...prev, `✅ Preview loaded!`]);
         } catch (error) {
-          console.error("Failed to navigate:", error);
+          console.error("❌ Navigation failed:", error);
           setLogs((prev) => [...prev, `❌ Navigation failed: ${error}`]);
         }
+      } else {
+        console.log("⏸️ Navigation skipped - waiting for conditions");
       }
     };
 
@@ -158,18 +172,7 @@ function ProjectContent() {
             const url = `http://localhost:${server.port}`;
             setServerUrl(url);
             setLogs((prev) => [...prev, `✅ Server running at ${url}`]);
-
-            // Navigate BrowserView to the server URL
-            if (browserViewReady && api.navigateBrowserView) {
-              try {
-                setLogs((prev) => [...prev, `🌐 Loading ${url}...`]);
-                await api.navigateBrowserView(url);
-                setLogs((prev) => [...prev, `✅ Preview loaded!`]);
-              } catch (error) {
-                console.error("Failed to navigate:", error);
-                setLogs((prev) => [...prev, `❌ Navigation failed: ${error}`]);
-              }
-            }
+            // Navigation will be handled by the useEffect that watches browserViewReady and serverUrl
           }
         });
       }
