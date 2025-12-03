@@ -26,6 +26,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("server:stopped", (_, serverId) => callback(serverId));
   },
 
+  // Chromium browser operations
+  launchChromium: (config?: any) =>
+    ipcRenderer.invoke("chromium:launch", config),
+  navigateChromium: (instanceId: string, url: string) =>
+    ipcRenderer.invoke("chromium:navigate", { instanceId, url }),
+  executeChromiumJs: (instanceId: string, script: string) =>
+    ipcRenderer.invoke("chromium:execute-js", { instanceId, script }),
+  takeChromiumScreenshot: (instanceId: string, outputPath: string) =>
+    ipcRenderer.invoke("chromium:screenshot", { instanceId, outputPath }),
+  getChromiumContent: (instanceId: string) =>
+    ipcRenderer.invoke("chromium:get-content", instanceId),
+  closeChromium: (instanceId: string) =>
+    ipcRenderer.invoke("chromium:close", instanceId),
+
   // Filesystem operations
   readFile: (filePath: string) => ipcRenderer.invoke("fs:read-file", filePath),
   writeFile: (filePath: string, content: string) =>

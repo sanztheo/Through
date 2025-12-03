@@ -4,6 +4,7 @@ import { loadConfig } from "./utils/config";
 import { registerProjectHandlers } from "./ipc/project";
 import { registerServerHandlers } from "./ipc/server";
 import { registerFilesystemHandlers } from "./ipc/filesystem";
+import { registerChromiumHandlers } from "./ipc/chromium";
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -58,6 +59,7 @@ app.whenReady().then(async () => {
     registerProjectHandlers();
     registerServerHandlers();
     registerFilesystemHandlers();
+    registerChromiumHandlers();
     console.log("IPC handlers registered");
 
     // Create main window

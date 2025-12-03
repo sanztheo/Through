@@ -2,6 +2,7 @@
   "name": "through",
   "version": "0.1.0",
   "description": "Desktop project analyzer and launcher",
+  "type": "module",
   "private": true,
   "workspaces": [
     "apps/*",

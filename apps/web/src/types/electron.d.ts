@@ -1,4 +1,9 @@
-import type { ProjectAnalysis, ServerInstance } from "@through/shared";
+import type {
+  ProjectAnalysis,
+  ServerInstance,
+  ChromiumInstance,
+  ChromiumConfig,
+} from "@through/shared";
 
 export interface ElectronAPI {
   // Project operations
@@ -21,6 +26,17 @@ export interface ElectronAPI {
   // Server events
   onServerReady: (callback: (server: ServerInstance) => void) => void;
   onServerStopped: (callback: (serverId: string) => void) => void;
+
+  // Chromium browser operations
+  launchChromium: (config?: ChromiumConfig) => Promise<ChromiumInstance>;
+  navigateChromium: (instanceId: string, url: string) => Promise<boolean>;
+  executeChromiumJs: (instanceId: string, script: string) => Promise<string>;
+  takeChromiumScreenshot: (
+    instanceId: string,
+    outputPath: string,
+  ) => Promise<string>;
+  getChromiumContent: (instanceId: string) => Promise<string>;
+  closeChromium: (instanceId: string) => Promise<boolean>;
 
   // Filesystem operations
   readFile: (

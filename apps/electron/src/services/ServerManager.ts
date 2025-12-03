@@ -36,6 +36,18 @@ export class ServerManager extends EventEmitter {
     // Parse command into executable and args
     const [cmd, ...args] = command.split(" ");
 
+    // Add port argument to the command
+    // For npm/yarn: add -- --port <actualPort> or -- -p <actualPort>
+    if (cmd === "npm" || cmd === "yarn" || cmd === "pnpm") {
+      args.push("--");
+      // Detect framework to use correct port flag
+      if (command.includes("vite") || command.includes("dev")) {
+        args.push("--port", actualPort.toString());
+      } else {
+        args.push("-p", actualPort.toString());
+      }
+    }
+
     try {
       // Spawn using Rust NAPI
       const handle = spawnDevServer(projectPath, cmd, args);
