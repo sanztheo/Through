@@ -157,7 +157,7 @@ function ProjectContent() {
         console.log("📡 Received server:stopped event", stoppedId);
         setServerStatus("idle");
         setServerUrl(null);
-        setLogs((prev) => [...prev, "Server stopped"]);
+        setServerLogs((prev) => [...prev, "Server stopped"]);
       });
     }
 
@@ -165,7 +165,15 @@ function ProjectContent() {
     if (api.onServerLog) {
       api.onServerLog((logData: { id: string; log: string; type: string }) => {
         console.log("📋 Received server log:", logData);
-        setLogs((prev) => [...prev, logData.log]);
+        setServerLogs((prev) => [...prev, logData.log]);
+      });
+    }
+
+    // Listen for browser console logs
+    if (api.onBrowserConsoleLog) {
+      api.onBrowserConsoleLog((logData) => {
+        console.log("🌐 Received browser console log:", logData);
+        setDevToolsLogs((prev) => [...prev, logData]);
       });
     }
   }, [api]);
@@ -182,7 +190,7 @@ function ProjectContent() {
 
     try {
       setServerStatus("starting");
-      setLogs([`Starting ${projectInfo.framework} dev server...`]);
+      setServerLogs([`Starting ${projectInfo.framework} dev server...`]);
 
       const result = await api.startServer(
         projectInfo.path,
@@ -194,7 +202,7 @@ function ProjectContent() {
       // Event listeners are set up in a separate useEffect to avoid race conditions
     } catch (err) {
       setServerStatus("error");
-      setLogs((prev) => [
+      setServerLogs((prev) => [
         ...prev,
         `Error: ${err instanceof Error ? err.message : "Failed to start server"}`,
       ]);
@@ -209,9 +217,9 @@ function ProjectContent() {
       setServerStatus("idle");
       setServerUrl(null);
       setServerId(null);
-      setLogs((prev) => [...prev, "Server stopped"]);
+      setServerLogs((prev) => [...prev, "Server stopped"]);
     } catch (err) {
-      setLogs((prev) => [
+      setServerLogs((prev) => [
         ...prev,
         `Error stopping server: ${err instanceof Error ? err.message : "Unknown error"}`,
       ]);
@@ -348,6 +356,7 @@ function ProjectContent() {
           }`}
         >
           <div className="flex flex-col h-full">
+            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
               <h2 className="text-gray-900 font-semibold text-sm">Terminal</h2>
               <button
@@ -369,16 +378,75 @@ function ProjectContent() {
                 </svg>
               </button>
             </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 bg-white">
+              <button
+                onClick={() => setActiveTab("server")}
+                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                  activeTab === "server"
+                    ? "text-gray-900 border-b-2 border-gray-900 bg-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                Server
+              </button>
+              <button
+                onClick={() => setActiveTab("devtools")}
+                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                  activeTab === "devtools"
+                    ? "text-gray-900 border-b-2 border-gray-900 bg-white"
+                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                }`}
+              >
+                DevTools
+              </button>
+            </div>
+
+            {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-white">
-              {logs.map((log, index) => (
-                <div key={index} className="text-gray-800 mb-1 leading-relaxed">
-                  {log}
-                </div>
-              ))}
-              {logs.length === 0 && (
-                <div className="text-gray-400 text-sm">
-                  No logs yet. Start the server to see output.
-                </div>
+              {activeTab === "server" ? (
+                <>
+                  {serverLogs.map((log, index) => (
+                    <div
+                      key={index}
+                      className="text-gray-800 mb-1 leading-relaxed"
+                    >
+                      {log}
+                    </div>
+                  ))}
+                  {serverLogs.length === 0 && (
+                    <div className="text-gray-400 text-sm">
+                      No server logs yet. Start the server to see output.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {devToolsLogs.map((log, index) => (
+                    <div
+                      key={index}
+                      className={`mb-1 leading-relaxed ${
+                        log.type === "error"
+                          ? "text-red-600"
+                          : log.type === "warning"
+                            ? "text-yellow-600"
+                            : log.type === "debug"
+                              ? "text-blue-600"
+                              : "text-gray-800"
+                      }`}
+                    >
+                      <span className="text-gray-500 mr-2">[{log.type}]</span>
+                      {log.message}
+                    </div>
+                  ))}
+                  {devToolsLogs.length === 0 && (
+                    <div className="text-gray-400 text-sm">
+                      No console logs yet. Open your app in the preview to see
+                      console output.
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
