@@ -198,9 +198,10 @@ function ProjectContent() {
           </div>
           <div className="flex-1 bg-white">
             {serverUrl ? (
-              <webview
+              <iframe
                 src={serverUrl}
-                style={{ width: "100%", height: "100%" }}
+                className="w-full h-full border-0"
+                title="Localhost Preview"
               />
             ) : (
               <div className="flex items-center justify-center h-full text-gray-500">
