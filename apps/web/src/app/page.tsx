@@ -20,6 +20,11 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recentProjects, setRecentProjects] = useState<ProjectInfo[]>([]);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    project: ProjectInfo;
+  } | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -28,6 +33,15 @@ export default function HomePage() {
       setRecentProjects(JSON.parse(stored));
     }
   }, []);
+
+  // Close context menu when clicking outside
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    if (contextMenu) {
+      document.addEventListener("click", handleClick);
+      return () => document.removeEventListener("click", handleClick);
+    }
+  }, [contextMenu]);
 
   const saveProject = (project: ProjectInfo) => {
     const updated = [
@@ -76,6 +90,36 @@ export default function HomePage() {
 
   const handleProjectClick = (project: ProjectInfo) => {
     router.push(`/project?path=${encodeURIComponent(project.path)}`);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, project: ProjectInfo) => {
+    e.preventDefault();
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      project,
+    });
+  };
+
+  const handleDeleteProject = async (project: ProjectInfo) => {
+    if (!api) return;
+
+    try {
+      // Invalider le cache du projet
+      await api.invalidateCache(project.path);
+
+      // Supprimer du localStorage
+      const updated = recentProjects.filter((p) => p.path !== project.path);
+      setRecentProjects(updated);
+      if (typeof window !== "undefined") {
+        localStorage.setItem("recentProjects", JSON.stringify(updated));
+      }
+
+      setContextMenu(null);
+    } catch (err) {
+      console.error("Error deleting project:", err);
+      setError(err instanceof Error ? err.message : "Failed to delete project");
+    }
   };
 
   return (
@@ -148,6 +192,7 @@ export default function HomePage() {
                 <button
                   key={project.path}
                   onClick={() => handleProjectClick(project)}
+                  onContextMenu={(e) => handleContextMenu(e, project)}
                   className="w-full hover:bg-gray-50 rounded-md p-3 flex justify-between items-center transition-colors cursor-pointer"
                 >
                   <span className="font-medium text-black text-sm">
@@ -175,6 +220,38 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50"
+          style={{
+            left: `${contextMenu.x}px`,
+            top: `${contextMenu.y}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => handleDeleteProject(contextMenu.project)}
+            className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center gap-2"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
+            </svg>
+            Delete project
+          </button>
+        </div>
+      )}
     </main>
   );
 }
