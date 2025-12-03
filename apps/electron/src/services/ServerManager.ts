@@ -2,6 +2,7 @@ import {
   spawnDevServer,
   killProcess,
   isPortAvailable,
+  isPortListening,
   findAvailablePort,
 } from "@through/native";
 import { EventEmitter } from "events";
@@ -101,9 +102,10 @@ export class ServerManager extends EventEmitter {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
-      const available = isPortAvailable(port);
-      if (!available) {
-        // Port is now occupied, server is ready
+      // Check if server is actively listening on the port
+      const listening = isPortListening(port);
+      if (listening) {
+        // Server is ready and accepting connections
         return;
       }
 

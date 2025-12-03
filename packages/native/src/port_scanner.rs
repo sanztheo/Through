@@ -49,6 +49,48 @@ pub fn is_port_available(port: u16) -> Result<bool> {
     }
 }
 
+/// Check if a server is listening on a port by attempting to connect
+///
+/// # Arguments
+/// * `port` - Port number to check (1-65535)
+///
+/// # Returns
+/// * `Result<bool>` - true if a server is listening, false otherwise
+///
+/// # Example
+/// ```
+/// let listening = is_port_listening(3000)?;
+/// if listening {
+///     println!("Server is listening on port 3000");
+/// }
+/// ```
+#[napi]
+pub fn is_port_listening(port: u16) -> Result<bool> {
+    if port == 0 {
+        return Err(Error::new(
+            Status::InvalidArg,
+            "Port number must be between 1 and 65535",
+        ));
+    }
+
+    // Try to connect to localhost on the specified port
+    let addrs = [
+        format!("127.0.0.1:{}", port),
+        format!("localhost:{}", port),
+    ];
+
+    for addr_str in &addrs {
+        if let Ok(socket_addr) = addr_str.parse::<SocketAddr>() {
+            match TcpStream::connect_timeout(&socket_addr, Duration::from_millis(200)) {
+                Ok(_) => return Ok(true), // Successfully connected
+                Err(_) => continue, // Try next address
+            }
+        }
+    }
+
+    Ok(false) // No connection succeeded
+}
+
 /// Find an available port within a specified range
 ///
 /// # Arguments
