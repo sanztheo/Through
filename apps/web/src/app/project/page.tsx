@@ -101,6 +101,24 @@ function ProjectContent() {
     return () => window.removeEventListener("resize", updateBounds);
   }, [browserViewReady, api]);
 
+  // Navigate BrowserView when both ready and server URL available
+  useEffect(() => {
+    const navigateToServer = async () => {
+      if (browserViewReady && serverUrl && api?.navigateBrowserView) {
+        try {
+          setLogs((prev) => [...prev, `🌐 Loading ${serverUrl}...`]);
+          await api.navigateBrowserView(serverUrl);
+          setLogs((prev) => [...prev, `✅ Preview loaded!`]);
+        } catch (error) {
+          console.error("Failed to navigate:", error);
+          setLogs((prev) => [...prev, `❌ Navigation failed: ${error}`]);
+        }
+      }
+    };
+
+    navigateToServer();
+  }, [browserViewReady, serverUrl, api]);
+
   // Auto-start server when project info is loaded
   useEffect(() => {
     if (projectInfo && api && serverStatus === "idle") {
