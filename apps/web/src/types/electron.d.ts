@@ -26,6 +26,9 @@ export interface ElectronAPI {
   // Server events
   onServerReady: (callback: (server: ServerInstance) => void) => void;
   onServerStopped: (callback: (serverId: string) => void) => void;
+  onServerLog: (
+    callback: (logData: { id: string; log: string; type: string }) => void,
+  ) => void;
 
   // BrowserView operations for embedded preview
   createBrowserView: (bounds: {

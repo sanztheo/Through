@@ -60,13 +60,8 @@ function ProjectContent() {
         });
 
         setBrowserViewReady(true);
-        setLogs((prev) => [...prev, "✅ Embedded preview initialized"]);
       } catch (error) {
         console.error("Failed to create BrowserView:", error);
-        setLogs((prev) => [
-          ...prev,
-          `❌ Failed to create preview: ${error instanceof Error ? error.message : "Unknown error"}`,
-        ]);
       }
     };
 
@@ -128,13 +123,8 @@ function ProjectContent() {
       try {
         console.log(`🔗 Navigating embedded preview to ${serverUrl}`);
         await api.navigateBrowserView(serverUrl);
-        setLogs((prev) => [...prev, `✅ Preview loaded: ${serverUrl}`]);
       } catch (error) {
         console.error("Failed to navigate BrowserView:", error);
-        setLogs((prev) => [
-          ...prev,
-          `❌ Failed to load preview: ${error instanceof Error ? error.message : "Unknown error"}`,
-        ]);
       }
     };
 
@@ -154,7 +144,6 @@ function ProjectContent() {
         setServerStatus("running");
         const url = `http://localhost:${server.port}`;
         setServerUrl(url);
-        setLogs((prev) => [...prev, `✅ Server running at ${url}`]);
       });
     }
 
@@ -167,18 +156,19 @@ function ProjectContent() {
         setLogs((prev) => [...prev, "Server stopped"]);
       });
     }
+
+    // Listen for server logs
+    if (api.onServerLog) {
+      api.onServerLog((logData: { id: string; log: string; type: string }) => {
+        console.log("📋 Received server log:", logData);
+        setLogs((prev) => [...prev, logData.log]);
+      });
+    }
   }, [api]);
 
   // Auto-start server when project info is loaded
   useEffect(() => {
     if (projectInfo && api && serverStatus === "idle") {
-      setLogs((prev) => [
-        ...prev,
-        `🚀 Auto-starting ${projectInfo.framework} dev server...`,
-        `📂 Project: ${projectInfo.name}`,
-        `🛠️ Command: ${projectInfo.startCommand}`,
-        `🔌 Port: ${projectInfo.port}`,
-      ]);
       startServer();
     }
   }, [projectInfo, api]);
@@ -189,8 +179,6 @@ function ProjectContent() {
     try {
       setServerStatus("starting");
       setLogs([`Starting ${projectInfo.framework} dev server...`]);
-      setLogs((prev) => [...prev, `Command: ${projectInfo.startCommand}`]);
-      setLogs((prev) => [...prev, `Port: ${projectInfo.port}`]);
 
       const result = await api.startServer(
         projectInfo.path,

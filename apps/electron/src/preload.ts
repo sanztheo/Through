@@ -25,6 +25,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onServerStopped: (callback: (serverId: string) => void) => {
     ipcRenderer.on("server:stopped", (_, serverId) => callback(serverId));
   },
+  onServerLog: (
+    callback: (logData: { id: string; log: string; type: string }) => void,
+  ) => {
+    ipcRenderer.on("server:log", (_, logData) => callback(logData));
+  },
 
   // BrowserView operations for embedded preview
   createBrowserView: (bounds: {

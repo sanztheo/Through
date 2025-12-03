@@ -50,6 +50,12 @@ export function registerServerHandlers() {
     }
   });
 
+  serverManager.on("server:log", (logData) => {
+    if (mainWindowWebContents) {
+      mainWindowWebContents.send("server:log", logData);
+    }
+  });
+
   // Stop all servers on app quit
   ipcMain.on("app:quit", async () => {
     await serverManager.stopAllServers();
