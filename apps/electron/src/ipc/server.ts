@@ -59,12 +59,8 @@ export function registerServerHandlers() {
   });
 
   serverManager.on("server:log", (logData) => {
-    console.log("📤 Forwarding log to renderer:", logData);
     if (mainWindowWebContents) {
       mainWindowWebContents.send("server:log", logData);
-      console.log("✅ Log sent to renderer");
-    } else {
-      console.error("❌ mainWindowWebContents is null, cannot send log");
     }
   });
 

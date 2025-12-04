@@ -58,8 +58,6 @@ export class ServerManager extends EventEmitter {
         (log: string, isError: boolean) => {
           // Emit log events to IPC with client index
           if (log.trim()) {
-            console.log(`[Server ${id}] ${log}`);
-
             // Try to detect port from common log patterns
             const detectedPort = this.detectPortFromLog(log);
             if (detectedPort) {
@@ -67,7 +65,8 @@ export class ServerManager extends EventEmitter {
                 `🔍 Detected port ${detectedPort} from logs for server ${id}`,
               );
               const server = this.servers.get(id);
-              if (server && !server.port) {
+              if (server && (!server.port || server.port === 0)) {
+                console.log(`✅ Setting port ${detectedPort} for server ${id}`);
                 server.port = detectedPort;
                 this.servers.set(id, server);
               }
@@ -150,6 +149,9 @@ export class ServerManager extends EventEmitter {
   }
 
   private detectPortFromLog(log: string): number | null {
+    // Strip ANSI color codes first for cleaner matching
+    const cleanLog = log.replace(/\x1B\[[0-9;]*[a-zA-Z]/g, "");
+
     // Common patterns for port detection in server logs
     const patterns = [
       /(?:Local|local):\s*https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i, // Vite, Next.js: Local: http://localhost:5173
@@ -160,7 +162,7 @@ export class ServerManager extends EventEmitter {
     ];
 
     for (const pattern of patterns) {
-      const match = log.match(pattern);
+      const match = cleanLog.match(pattern);
       if (match && match[1]) {
         const port = parseInt(match[1], 10);
         if (port > 0 && port < 65536) {
