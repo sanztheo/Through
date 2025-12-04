@@ -1028,7 +1028,18 @@ function ProjectContent() {
       </div>
 
       {/* Main Content - Flex Layout (no more overlay!) */}
-      <div className="flex-1 flex relative overflow-hidden">
+      <div className="flex-1 flex overflow-hidden">
+        {/* Terminal Sidebar - on the left */}
+        <TerminalPanel
+          isOpen={showTerminal}
+          onClose={() => setShowTerminal(false)}
+          servers={servers}
+          devToolsLogs={devToolsLogs}
+          projectPath={projectPath || ""}
+          onRestartServer={restartServer}
+          onFileOpen={handleFileOpen}
+        />
+
         {/* Browser Preview with iframe (integrated in layout) */}
         {viewMode === "browser" && (
           <div className="flex-1 flex flex-col bg-white">
@@ -1080,17 +1091,6 @@ function ProjectContent() {
             />
           </div>
         )}
-
-        {/* Terminal Sidebar */}
-        <TerminalPanel
-          isOpen={showTerminal}
-          onClose={() => setShowTerminal(false)}
-          servers={servers}
-          devToolsLogs={devToolsLogs}
-          projectPath={projectPath || ""}
-          onRestartServer={restartServer}
-          onFileOpen={handleFileOpen}
-        />
       </div>
     </div>
   );

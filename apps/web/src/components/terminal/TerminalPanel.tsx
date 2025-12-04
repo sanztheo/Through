@@ -42,13 +42,11 @@ export function TerminalPanel({
 }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("devtools");
 
+  // Don't render if not open (instead of translate off-screen)
+  if (!isOpen) return null;
+
   return (
-    <div
-      className={`absolute left-0 top-0 bottom-0 w-96 bg-white border-r border-gray-300 shadow-lg z-20 transition-transform duration-200 ease-out ${
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      }`}
-    >
-      <div className="flex flex-col h-full">
+    <div className="w-96 bg-white border-r border-gray-200 flex-shrink-0 flex flex-col h-full">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
           <h2 className="text-gray-900 font-semibold text-sm">Terminal</h2>
@@ -147,6 +145,5 @@ export function TerminalPanel({
           )}
         </div>
       </div>
-    </div>
   );
 }
