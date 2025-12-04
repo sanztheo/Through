@@ -28,6 +28,7 @@ interface TerminalPanelProps {
   devToolsLogs: DevToolsLog[];
   projectPath: string;
   onRestartServer: (index: number) => void;
+  onFileOpen?: (path: string, filename: string) => void;
 }
 
 export function TerminalPanel({
@@ -37,6 +38,7 @@ export function TerminalPanel({
   devToolsLogs,
   projectPath,
   onRestartServer,
+  onFileOpen,
 }: TerminalPanelProps) {
   const [activeTab, setActiveTab] = useState<string>("devtools");
 
@@ -140,7 +142,7 @@ export function TerminalPanel({
 
           {activeTab === "files" && (
             <div className="flex-1 overflow-hidden">
-              <FileExplorer projectPath={projectPath} />
+              <FileExplorer projectPath={projectPath} onFileOpen={onFileOpen} />
             </div>
           )}
         </div>

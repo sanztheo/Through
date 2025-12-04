@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { File, Folder, ChevronRight, ChevronDown } from "lucide-react";
+import { Folder, ChevronRight, ChevronDown } from "lucide-react";
+import { FileIcon } from "./editor/FileIcon";
 
 interface FileNode {
   name: string;
@@ -12,9 +13,10 @@ interface FileNode {
 
 interface FileExplorerProps {
   projectPath: string;
+  onFileOpen?: (path: string, filename: string) => void;
 }
 
-export function FileExplorer({ projectPath }: FileExplorerProps) {
+export function FileExplorer({ projectPath, onFileOpen }: FileExplorerProps) {
   const [files, setFiles] = useState<FileNode[]>([]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     new Set(),
@@ -49,25 +51,31 @@ export function FileExplorer({ projectPath }: FileExplorerProps) {
     setExpandedFolders(updated);
   };
 
+  const handleFileClick = (node: FileNode) => {
+    if (onFileOpen) {
+      onFileOpen(node.path, node.name);
+    }
+  };
+
   const renderNode = (node: FileNode, depth: number = 0) => {
     const isExpanded = expandedFolders.has(node.path);
-    const paddingLeft = depth * 20 + 12;
+    const paddingLeft = depth * 16 + 8;
 
     if (node.type === "folder") {
       return (
         <div key={node.path}>
           <button
             onClick={() => toggleFolder(node.path)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors text-left"
+            className="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-gray-100 transition-colors text-left"
             style={{ paddingLeft: `${paddingLeft}px` }}
           >
             {isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-gray-400" />
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             ) : (
-              <ChevronRight className="w-4 h-4 text-gray-400" />
+              <ChevronRight className="w-4 h-4 text-gray-400 flex-shrink-0" />
             )}
-            <Folder className="w-4 h-4 text-blue-500" />
-            <span className="text-sm text-gray-700">{node.name}</span>
+            <Folder className="w-4 h-4 text-blue-500 flex-shrink-0" />
+            <span className="text-sm text-gray-700 truncate">{node.name}</span>
           </button>
           {isExpanded && node.children && (
             <div>
@@ -79,14 +87,15 @@ export function FileExplorer({ projectPath }: FileExplorerProps) {
     }
 
     return (
-      <div
+      <button
         key={node.path}
-        className="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 transition-colors"
-        style={{ paddingLeft: `${paddingLeft + 24}px` }}
+        onClick={() => handleFileClick(node)}
+        className="w-full flex items-center gap-1.5 px-2 py-1 hover:bg-gray-100 transition-colors text-left"
+        style={{ paddingLeft: `${paddingLeft + 20}px` }}
       >
-        <File className="w-4 h-4 text-gray-400" />
-        <span className="text-sm text-gray-600">{node.name}</span>
-      </div>
+        <FileIcon filename={node.name} className="w-4 h-4 flex-shrink-0" />
+        <span className="text-sm text-gray-600 truncate">{node.name}</span>
+      </button>
     );
   };
 
@@ -105,7 +114,7 @@ export function FileExplorer({ projectPath }: FileExplorerProps) {
           <p className="text-sm text-gray-400">No files found</p>
         </div>
       ) : (
-        <div className="py-2">{files.map((node) => renderNode(node))}</div>
+        <div className="py-1">{files.map((node) => renderNode(node))}</div>
       )}
     </div>
   );

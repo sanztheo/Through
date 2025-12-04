@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Terminal } from "lucide-react";
 import { TerminalPanel } from "@/components/terminal";
+import { CodeEditorPanel, EditorTab } from "@/components/editor";
 
 
 
@@ -52,6 +53,12 @@ function ProjectContent() {
   const [activeBrowserTabId, setActiveBrowserTabId] = useState<string | null>(
     null,
   );
+  
+  // Editor state
+  const [editorTabs, setEditorTabs] = useState<EditorTab[]>([]);
+  const [activeEditorTabId, setActiveEditorTabId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<"browser" | "editor">("browser");
+  
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Map server IDs to their index for log routing before IDs are assigned
@@ -220,6 +227,118 @@ function ProjectContent() {
       }
     },
     [api, projectPath, commands, servers],
+  );
+
+  // Open file in editor
+  const handleFileOpen = useCallback(
+    async (filePath: string, filename: string) => {
+      if (!api) return;
+
+      // Check if file is already open
+      const existingTab = editorTabs.find((t) => t.path === filePath);
+      if (existingTab) {
+        setActiveEditorTabId(existingTab.id);
+        setViewMode("editor");
+        return;
+      }
+
+      try {
+        const result = await api.readFile(filePath);
+        if (result.success && result.content !== undefined) {
+          const newTab: EditorTab = {
+            id: `editor_${Date.now()}`,
+            filename,
+            path: filePath,
+            content: result.content,
+            originalContent: result.content,
+            isModified: false,
+          };
+
+          setEditorTabs((prev) => [...prev, newTab]);
+          setActiveEditorTabId(newTab.id);
+          setViewMode("editor");
+        } else {
+          console.error("Failed to read file:", result.error);
+        }
+      } catch (err) {
+        console.error("Failed to open file:", err);
+      }
+    },
+    [api, editorTabs],
+  );
+
+  // Handle editor content change
+  const handleEditorContentChange = useCallback(
+    (tabId: string, content: string) => {
+      setEditorTabs((prev) =>
+        prev.map((tab) =>
+          tab.id === tabId
+            ? {
+                ...tab,
+                content,
+                isModified: content !== tab.originalContent,
+              }
+            : tab,
+        ),
+      );
+    },
+    [],
+  );
+
+  // Close editor tab
+  const handleEditorTabClose = useCallback(
+    (tabId: string) => {
+      const tab = editorTabs.find((t) => t.id === tabId);
+      if (tab?.isModified) {
+        const confirm = window.confirm(
+          `${tab.filename} has unsaved changes. Close anyway?`,
+        );
+        if (!confirm) return;
+      }
+
+      setEditorTabs((prev) => prev.filter((t) => t.id !== tabId));
+
+      // If closing active tab, switch to another or back to browser
+      if (activeEditorTabId === tabId) {
+        const remaining = editorTabs.filter((t) => t.id !== tabId);
+        if (remaining.length > 0) {
+          setActiveEditorTabId(remaining[remaining.length - 1].id);
+        } else {
+          setActiveEditorTabId(null);
+          setViewMode("browser");
+        }
+      }
+    },
+    [editorTabs, activeEditorTabId],
+  );
+
+  // Save file
+  const handleEditorSave = useCallback(
+    async (tabId: string) => {
+      if (!api) return;
+
+      const tab = editorTabs.find((t) => t.id === tabId);
+      if (!tab) return;
+
+      try {
+        const result = await api.writeFile(tab.path, tab.content);
+        if (result.success) {
+          setEditorTabs((prev) =>
+            prev.map((t) =>
+              t.id === tabId
+                ? { ...t, originalContent: t.content, isModified: false }
+                : t,
+            ),
+          );
+          console.log(`✅ Saved ${tab.filename}`);
+        } else {
+          console.error("Failed to save file:", result.error);
+        }
+      } catch (err) {
+        console.error("Failed to save file:", err);
+      }
+    },
+    [api, editorTabs],
   );
 
   useEffect(() => {
@@ -738,6 +857,42 @@ function ProjectContent() {
               </button>
             </div>
           )}
+          
+          {/* Editor Tabs */}
+          {editorTabs.length > 0 && (
+            <div className="flex items-center gap-1 ml-2 border-l border-gray-200 pl-2">
+              {editorTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveEditorTabId(tab.id);
+                    setViewMode("editor");
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                    viewMode === "editor" && activeEditorTabId === tab.id
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}
+                >
+                  <span className="max-w-[100px] truncate">{tab.filename}</span>
+                  {tab.isModified && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  )}
+                </button>
+              ))}
+              {viewMode === "editor" && (
+                <button
+                  onClick={() => setViewMode("browser")}
+                  className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors ml-1"
+                  title="Back to Browser"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2.5">
           {/* Browser Navigation Controls */}
@@ -918,6 +1073,23 @@ function ProjectContent() {
           )}
         </div>
 
+        {/* Code Editor Panel - shown when files are open */}
+        {editorTabs.length > 0 && viewMode === "editor" && (
+          <div className="absolute inset-0 z-10 bg-white">
+            <CodeEditorPanel
+              tabs={editorTabs}
+              activeTabId={activeEditorTabId}
+              onTabClick={(tabId) => {
+                setActiveEditorTabId(tabId);
+                setViewMode("editor");
+              }}
+              onTabClose={handleEditorTabClose}
+              onContentChange={handleEditorContentChange}
+              onSave={handleEditorSave}
+            />
+          </div>
+        )}
+
         {/* Terminal Sidebar */}
         <TerminalPanel
           isOpen={showTerminal}
@@ -926,6 +1098,7 @@ function ProjectContent() {
           devToolsLogs={devToolsLogs}
           projectPath={projectPath || ""}
           onRestartServer={restartServer}
+          onFileOpen={handleFileOpen}
         />
       </div>
     </div>
