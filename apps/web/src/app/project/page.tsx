@@ -72,6 +72,7 @@ function ProjectContent() {
   const searchParams = useSearchParams();
   const projectPath = searchParams.get("path");
   const commandsParam = searchParams.get("commands");
+  const autoStartParam = searchParams.get("autoStart");
   const { api } = useElectronAPI();
 
   const [commands, setCommands] = useState<string[]>(
@@ -92,7 +93,9 @@ function ProjectContent() {
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("devtools");
-  const [autoStartPending, setAutoStartPending] = useState(false);
+  const [autoStartPending, setAutoStartPending] = useState(
+    autoStartParam === "true",
+  );
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Map server IDs to their index for log routing before IDs are assigned

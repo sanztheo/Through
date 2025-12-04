@@ -97,10 +97,11 @@ export default function HomePage() {
 
       saveProject(projectInfo);
 
-      // Navigate to project page with commands
+      // Navigate to project page with commands and auto-start flag
       const searchParams = new URLSearchParams({
         path: selectedProject.path,
         commands: commands.join(","),
+        autoStart: "true", // Signal that servers should start immediately
       });
       router.push(`/project?${searchParams.toString()}`);
     } catch (err) {
