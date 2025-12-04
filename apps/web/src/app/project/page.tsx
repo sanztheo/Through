@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Suspense } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Terminal } from "lucide-react";
@@ -92,6 +92,7 @@ function ProjectContent() {
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("devtools");
+  const [autoStartPending, setAutoStartPending] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Map server IDs to their index for log routing before IDs are assigned
@@ -100,6 +101,60 @@ function ProjectContent() {
   // Derived state
   const firstRunningServer = servers.find((s) => s.status === "running");
   const anyServerRunning = servers.some((s) => s.status === "running");
+
+  // Function to start all servers
+  const startAllServers = useCallback(async () => {
+    if (!api || !projectPath) return;
+
+    // Start ALL servers in parallel using Promise.all()
+    const startPromises = commands.map(async (command, i) => {
+      const port = 3000 + i;
+
+      try {
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === i
+              ? { ...s, status: "starting", logs: [`Starting: ${command}...`] }
+              : s,
+          ),
+        );
+
+        // Pass index to main process so it can be included in response
+        const result = await api.startServer(projectPath, command, port, i);
+
+        // Register ID -> index mapping IMMEDIATELY when promise resolves
+        serverIdMapRef.current.set(result.id, i);
+        console.log(
+          `🗺️ Registered server ID mapping: ${result.id} -> index ${i}`,
+        );
+
+        setServers((prev) =>
+          prev.map((s, idx) => (idx === i ? { ...s, id: result.id } : s)),
+        );
+
+        return { success: true, index: i };
+      } catch (err) {
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === i
+              ? {
+                  ...s,
+                  status: "error",
+                  logs: [
+                    ...s.logs,
+                    `Error: ${err instanceof Error ? err.message : "Failed"}`,
+                  ],
+                }
+              : s,
+          ),
+        );
+        return { success: false, index: i, error: err };
+      }
+    });
+
+    // Wait for all servers to start simultaneously
+    await Promise.all(startPromises);
+  }, [api, projectPath, commands]);
 
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
@@ -138,6 +193,10 @@ function ProjectContent() {
               logs: [],
             })),
           );
+
+          // Mark that we need to auto-start servers
+          console.log("[Project] Marking servers for auto-start");
+          setAutoStartPending(true);
         }
       } catch (error) {
         console.error("[Project] Failed to load commands from cache:", error);
@@ -146,6 +205,19 @@ function ProjectContent() {
 
     loadCommandsFromCache();
   }, [projectPath, commandsParam, api]);
+
+  // Auto-start servers when loaded from cache
+  useEffect(() => {
+    if (autoStartPending && commands.length > 0 && api) {
+      console.log("[Project] Auto-starting servers:", commands);
+      setAutoStartPending(false);
+
+      // Small delay to ensure servers state is initialized
+      setTimeout(() => {
+        startAllServers();
+      }, 100);
+    }
+  }, [autoStartPending, commands, api, startAllServers]);
 
   // Initialize BrowserView for embedded preview
   useEffect(() => {
@@ -338,66 +410,6 @@ function ProjectContent() {
       });
     }
   }, [api]);
-
-  // Auto-start all servers when component loads
-  useEffect(() => {
-    if (projectPath && api && commands.length > 0) {
-      startAllServers();
-    }
-  }, [projectPath, api]);
-
-  const startAllServers = async () => {
-    if (!api || !projectPath) return;
-
-    // Start ALL servers in parallel using Promise.all()
-    const startPromises = commands.map(async (command, i) => {
-      const port = 3000 + i;
-
-      try {
-        setServers((prev) =>
-          prev.map((s, idx) =>
-            idx === i
-              ? { ...s, status: "starting", logs: [`Starting: ${command}...`] }
-              : s,
-          ),
-        );
-
-        // Pass index to main process so it can be included in response
-        const result = await api.startServer(projectPath, command, port, i);
-
-        // Register ID -> index mapping IMMEDIATELY when promise resolves
-        serverIdMapRef.current.set(result.id, i);
-        console.log(
-          `🗺️ Registered server ID mapping: ${result.id} -> index ${i}`,
-        );
-
-        setServers((prev) =>
-          prev.map((s, idx) => (idx === i ? { ...s, id: result.id } : s)),
-        );
-
-        return { success: true, index: i };
-      } catch (err) {
-        setServers((prev) =>
-          prev.map((s, idx) =>
-            idx === i
-              ? {
-                  ...s,
-                  status: "error",
-                  logs: [
-                    ...s.logs,
-                    `Error: ${err instanceof Error ? err.message : "Failed"}`,
-                  ],
-                }
-              : s,
-          ),
-        );
-        return { success: false, index: i, error: err };
-      }
-    });
-
-    // Wait for all servers to start simultaneously
-    await Promise.all(startPromises);
-  };
 
   if (!projectPath) {
     return (
