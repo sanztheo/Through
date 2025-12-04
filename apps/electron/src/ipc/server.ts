@@ -9,7 +9,12 @@ export function registerServerHandlers() {
     "server:start",
     async (
       event,
-      data: { projectPath: string; command: string; port: number },
+      data: {
+        projectPath: string;
+        command: string;
+        port: number;
+        index?: number;
+      },
     ) => {
       mainWindowWebContents = event.sender;
       console.log(`IPC: Starting server for ${data.projectPath}`);
@@ -18,7 +23,9 @@ export function registerServerHandlers() {
         data.command,
         data.port,
       );
-      return server;
+
+      // Return server with index for client-side mapping
+      return { ...server, clientIndex: data.index };
     },
   );
 

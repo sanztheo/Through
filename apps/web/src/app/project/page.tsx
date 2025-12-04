@@ -182,6 +182,13 @@ function ProjectContent() {
               : s,
           ),
         );
+
+        // Auto-switch to first server tab when it becomes ready
+        const serverIndex = serverIdMapRef.current.get(server.id);
+        if (serverIndex === 0) {
+          console.log(`🔀 Auto-switching to server-0 tab`);
+          setActiveTab(`server-0`);
+        }
       });
     }
 
@@ -206,19 +213,32 @@ function ProjectContent() {
 
         // Find server by ID (either direct match or via ID map)
         const serverIndex = serverIdMapRef.current.get(logData.id);
+        console.log(
+          `🔍 Server ID map lookup: ${logData.id} -> index ${serverIndex}`,
+        );
+        console.log(
+          `🗺️ Current ID map:`,
+          Array.from(serverIdMapRef.current.entries()),
+        );
 
-        setServers((prev) =>
-          prev.map((s, idx) => {
+        setServers((prev) => {
+          const updated = prev.map((s, idx) => {
             // Match by ID or by index from map
             if (
               s.id === logData.id ||
               (serverIndex !== undefined && idx === serverIndex)
             ) {
+              console.log(`✅ Matched server at index ${idx}, adding log`);
               return { ...s, logs: [...s.logs, logData.log] };
             }
             return s;
-          }),
-        );
+          });
+          console.log(
+            "📊 Updated servers state:",
+            updated.map((s) => ({ id: s.id, logsCount: s.logs.length })),
+          );
+          return updated;
+        });
       });
     }
 
@@ -241,8 +261,8 @@ function ProjectContent() {
   const startAllServers = async () => {
     if (!api || !projectPath) return;
 
-    for (let i = 0; i < commands.length; i++) {
-      const command = commands[i];
+    // Start ALL servers in parallel using Promise.all()
+    const startPromises = commands.map(async (command, i) => {
       const port = 3000 + i;
 
       try {
@@ -254,9 +274,10 @@ function ProjectContent() {
           ),
         );
 
-        const result = await api.startServer(projectPath, command, port);
+        // Pass index to main process so it can be included in response
+        const result = await api.startServer(projectPath, command, port, i);
 
-        // Register ID -> index mapping IMMEDIATELY for log routing
+        // Register ID -> index mapping IMMEDIATELY when promise resolves
         serverIdMapRef.current.set(result.id, i);
         console.log(
           `🗺️ Registered server ID mapping: ${result.id} -> index ${i}`,
@@ -265,6 +286,8 @@ function ProjectContent() {
         setServers((prev) =>
           prev.map((s, idx) => (idx === i ? { ...s, id: result.id } : s)),
         );
+
+        return { success: true, index: i };
       } catch (err) {
         setServers((prev) =>
           prev.map((s, idx) =>
@@ -280,8 +303,12 @@ function ProjectContent() {
               : s,
           ),
         );
+        return { success: false, index: i, error: err };
       }
-    }
+    });
+
+    // Wait for all servers to start simultaneously
+    await Promise.all(startPromises);
   };
 
   if (!projectPath) {

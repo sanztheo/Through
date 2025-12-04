@@ -26,6 +26,7 @@ export interface ElectronAPI {
     projectPath: string,
     command: string,
     port: number,
+    index?: number,
   ) => Promise<ServerInstance>;
   stopServer: (serverId: string) => Promise<{ success: boolean }>;
   getServer: (serverId: string) => Promise<ServerInstance | null>;

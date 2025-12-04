@@ -18,8 +18,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("project:validate-command", path, command),
 
   // Server operations
-  startServer: (projectPath: string, command: string, port: number) =>
-    ipcRenderer.invoke("server:start", { projectPath, command, port }),
+  startServer: (
+    projectPath: string,
+    command: string,
+    port: number,
+    index?: number,
+  ) =>
+    ipcRenderer.invoke("server:start", { projectPath, command, port, index }),
   stopServer: (serverId: string) => ipcRenderer.invoke("server:stop", serverId),
   getServer: (serverId: string) => ipcRenderer.invoke("server:get", serverId),
   getAllServers: () => ipcRenderer.invoke("server:get-all"),
