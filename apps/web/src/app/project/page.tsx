@@ -13,23 +13,23 @@ function parseLogLine(text: string): React.ReactNode[] {
   let currentColor = "";
 
   const colorMap: Record<string, string> = {
-    "30": "text-gray-900",
-    "31": "text-red-500",
-    "32": "text-green-500",
-    "33": "text-yellow-500",
-    "34": "text-blue-500",
-    "35": "text-purple-500",
-    "36": "text-cyan-500",
-    "37": "text-gray-300",
-    "90": "text-gray-500",
-    "91": "text-red-400",
-    "92": "text-green-400",
-    "93": "text-yellow-400",
-    "94": "text-blue-400",
-    "95": "text-purple-400",
-    "96": "text-cyan-400",
-    "97": "text-white",
-    "0": "", // reset
+    "30": "text-black",
+    "31": "text-red-600",
+    "32": "text-green-600",
+    "33": "text-yellow-700",
+    "34": "text-blue-600",
+    "35": "text-purple-600",
+    "36": "text-cyan-600",
+    "37": "text-gray-700",
+    "90": "text-gray-600",
+    "91": "text-red-500",
+    "92": "text-green-500",
+    "93": "text-yellow-600",
+    "94": "text-blue-500",
+    "95": "text-purple-500",
+    "96": "text-cyan-500",
+    "97": "text-gray-800",
+    "0": "text-black", // reset to black
   };
 
   let match;
