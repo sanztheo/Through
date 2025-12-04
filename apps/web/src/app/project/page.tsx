@@ -312,16 +312,32 @@ function ProjectContent() {
     [editorTabs, activeEditorTabId],
   );
 
+  // Use ref to track editorTabs for save handler to avoid stale closures
+  const editorTabsRef = useRef(editorTabs);
+  useEffect(() => {
+    editorTabsRef.current = editorTabs;
+  }, [editorTabs]);
+
   // Save file
   const handleEditorSave = useCallback(
     async (tabId: string) => {
-      if (!api) return;
+      console.log("💾 Saving tab:", tabId);
+      if (!api) {
+        console.error("❌ API not available");
+        return;
+      }
 
-      const tab = editorTabs.find((t) => t.id === tabId);
-      if (!tab) return;
+      const tab = editorTabsRef.current.find((t) => t.id === tabId);
+      if (!tab) {
+        console.error("❌ Tab not found:", tabId);
+        return;
+      }
 
+      console.log("📝 Writing file:", tab.path);
       try {
         const result = await api.writeFile(tab.path, tab.content);
+        console.log("📝 Write result:", result);
+        
         if (result.success) {
           setEditorTabs((prev) =>
             prev.map((t) =>
@@ -332,13 +348,13 @@ function ProjectContent() {
           );
           console.log(`✅ Saved ${tab.filename}`);
         } else {
-          console.error("Failed to save file:", result.error);
+          console.error("❌ Failed to save file:", result.error);
         }
       } catch (err) {
-        console.error("Failed to save file:", err);
+        console.error("❌ Exception saving file:", err);
       }
     },
-    [api, editorTabs],
+    [api], // Removed editorTabs dependency since we use ref
   );
 
   // Sync BrowserView bounds with the placeholder container
