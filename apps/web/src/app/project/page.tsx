@@ -22,13 +22,13 @@ function parseLogLine(text: string): React.ReactNode[] {
     "36": "text-cyan-600",
     "37": "text-gray-700",
     "90": "text-gray-600",
-    "91": "text-red-500",
-    "92": "text-green-500",
-    "93": "text-yellow-600",
-    "94": "text-blue-500",
-    "95": "text-purple-500",
-    "96": "text-cyan-500",
-    "97": "text-gray-800",
+    "91": "text-red-700",
+    "92": "text-green-700",
+    "93": "text-yellow-800",
+    "94": "text-blue-700",
+    "95": "text-purple-700",
+    "96": "text-cyan-700",
+    "97": "text-gray-900",
     "0": "text-black", // reset to black
   };
 
@@ -635,18 +635,18 @@ function ProjectContent() {
                         log.type === "error"
                           ? "text-red-600"
                           : log.type === "warning"
-                            ? "text-yellow-600"
+                            ? "text-yellow-700"
                             : log.type === "debug"
                               ? "text-blue-600"
-                              : "text-gray-800"
+                              : "text-black"
                       }`}
                     >
-                      <span className="text-gray-500 mr-2">[{log.type}]</span>
+                      <span className="text-gray-600 mr-2">[{log.type}]</span>
                       {log.message}
                     </div>
                   ))}
                   {devToolsLogs.length === 0 && (
-                    <div className="text-gray-400 text-sm">
+                    <div className="text-gray-500 text-sm">
                       No console logs yet. Open your app in the preview to see
                       console output.
                     </div>
@@ -658,7 +658,7 @@ function ProjectContent() {
                     activeTab === `server-${index}` ? (
                       <div key={index}>
                         <div className="mb-2 pb-2 border-b border-gray-200">
-                          <div className="text-gray-600 text-xs font-semibold mb-1">
+                          <div className="text-gray-700 text-xs font-semibold mb-1">
                             Command: {server.command}
                           </div>
                           {server.url && (
@@ -670,13 +670,13 @@ function ProjectContent() {
                         {server.logs.map((log, logIndex) => (
                           <div
                             key={logIndex}
-                            className="mb-1 leading-relaxed font-mono text-sm"
+                            className="mb-1 leading-relaxed font-mono text-sm text-black"
                           >
                             {parseLogLine(log)}
                           </div>
                         ))}
                         {server.logs.length === 0 && (
-                          <div className="text-gray-400 text-sm">
+                          <div className="text-gray-500 text-sm">
                             No logs yet for this server.
                           </div>
                         )}
