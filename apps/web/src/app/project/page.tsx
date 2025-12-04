@@ -341,6 +341,52 @@ function ProjectContent() {
     [api, editorTabs],
   );
 
+  // Sync BrowserView bounds with the placeholder container
+  // This is the key to making BrowserView work with flex layout
+  useEffect(() => {
+    if (!api?.setBrowserViewBounds) return;
+
+    const syncBounds = () => {
+      if (viewMode === "editor") {
+        // Hide BrowserView when in editor mode
+        api.setBrowserViewBounds({ x: -9999, y: -9999, width: 1, height: 1 });
+      } else if (previewContainerRef.current && browserViewReady) {
+        // Position BrowserView to match the placeholder container
+        const rect = previewContainerRef.current.getBoundingClientRect();
+        api.setBrowserViewBounds({
+          x: Math.round(rect.left),
+          y: Math.round(rect.top),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
+      }
+    };
+
+    // Sync on mount and when dependencies change
+    // Use requestAnimationFrame to ensure layout is updated
+    requestAnimationFrame(syncBounds);
+
+    // Use ResizeObserver to detect size changes of the placeholder
+    // This handles terminal open/close and window resize automatically
+    let resizeObserver: ResizeObserver | null = null;
+    
+    if (previewContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(syncBounds);
+      });
+      resizeObserver.observe(previewContainerRef.current);
+    }
+
+    window.addEventListener("resize", syncBounds);
+    
+    return () => {
+      window.removeEventListener("resize", syncBounds);
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+    };
+  }, [viewMode, showTerminal, browserViewReady, api]);
+
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
 
@@ -1040,17 +1086,35 @@ function ProjectContent() {
           onFileOpen={handleFileOpen}
         />
 
-        {/* Browser Preview with iframe (integrated in layout) */}
+        {/* Browser Preview - placeholder for BrowserView */}
         {viewMode === "browser" && (
-          <div className="flex-1 flex flex-col bg-white">
-            {firstRunningServer?.url ? (
-              <iframe
-                src={firstRunningServer.url}
-                className="flex-1 w-full border-none"
-                title="Dev Server Preview"
-              />
-            ) : (
-              <div className="flex-1 flex items-center justify-center bg-gray-100">
+          <div 
+            ref={previewContainerRef}
+            className="flex-1 flex flex-col bg-gray-50"
+          >
+            {/* This div serves as a placeholder - BrowserView will be positioned here */}
+            {!browserViewReady && (
+              <div className="flex-1 flex items-center justify-center">
+                <div className="text-center">
+                  <svg
+                    className="w-16 h-16 mx-auto mb-4 text-gray-400 animate-pulse"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <p className="text-gray-600">Initializing browser...</p>
+                </div>
+              </div>
+            )}
+            {browserViewReady && !firstRunningServer && (
+              <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
                   <svg
                     className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
@@ -1073,12 +1137,13 @@ function ProjectContent() {
                 </div>
               </div>
             )}
+            {/* BrowserView renders here as native overlay - synced with this container's bounds */}
           </div>
         )}
 
         {/* Code Editor Panel - shown when in editor mode */}
         {viewMode === "editor" && editorTabs.length > 0 && (
-          <div className="flex-1 bg-white">
+          <div className="flex-1 flex flex-col bg-white">
             <CodeEditorPanel
               tabs={editorTabs}
               activeTabId={activeEditorTabId}
