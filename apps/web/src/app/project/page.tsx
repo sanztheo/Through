@@ -106,8 +106,15 @@ function ProjectContent() {
   const startAllServers = useCallback(async () => {
     if (!api || !projectPath) return;
 
+    console.log(
+      `[startAllServers] Starting ${commands.length} servers:`,
+      commands,
+    );
+
     // Start ALL servers in parallel using Promise.all()
     const startPromises = commands.map(async (command, i) => {
+      console.log(`[startAllServers] Starting server ${i}: ${command}`);
+
       const port = 3000 + i;
 
       try {
@@ -123,9 +130,12 @@ function ProjectContent() {
         const result = await api.startServer(projectPath, command, port, i);
 
         // Register ID -> index mapping IMMEDIATELY when promise resolves
-        serverIdMapRef.current.set(result.id, i);
+        // Also check if clientIndex is returned from backend
+        const serverIndex =
+          result.clientIndex !== undefined ? result.clientIndex : i;
+        serverIdMapRef.current.set(result.id, serverIndex);
         console.log(
-          `🗺️ Registered server ID mapping: ${result.id} -> index ${i}`,
+          `🗺️ Registered server ID mapping: ${result.id} -> index ${serverIndex}`,
         );
 
         setServers((prev) =>
@@ -185,14 +195,14 @@ function ProjectContent() {
           setCommands(analysis.commands);
 
           // Initialize servers with cached commands
-          setServers(
-            analysis.commands.map((cmd) => ({
-              id: "",
-              command: cmd,
-              status: "idle",
-              logs: [],
-            })),
-          );
+          const initializedServers = analysis.commands.map((cmd) => ({
+            id: "",
+            command: cmd,
+            status: "idle" as const,
+            logs: [],
+          }));
+          console.log("[Project] Initializing servers:", initializedServers);
+          setServers(initializedServers);
 
           // Mark that we need to auto-start servers
           console.log("[Project] Marking servers for auto-start");
@@ -368,38 +378,45 @@ function ProjectContent() {
 
     // Listen for server logs
     if (api.onServerLog) {
-      api.onServerLog((logData: { id: string; log: string; type: string }) => {
-        console.log("📋 Received server log:", logData);
+      api.onServerLog(
+        (logData: {
+          id: string;
+          log: string;
+          type: string;
+          clientIndex?: number;
+        }) => {
+          console.log("📋 Received server log:", logData);
 
-        // Find server by ID (either direct match or via ID map)
-        const serverIndex = serverIdMapRef.current.get(logData.id);
-        console.log(
-          `🔍 Server ID map lookup: ${logData.id} -> index ${serverIndex}`,
-        );
-        console.log(
-          `🗺️ Current ID map:`,
-          Array.from(serverIdMapRef.current.entries()),
-        );
+          // Use clientIndex from backend if available, fallback to ID map
+          let serverIndex = logData.clientIndex;
+          if (serverIndex === undefined) {
+            serverIndex = serverIdMapRef.current.get(logData.id);
+          }
 
-        setServers((prev) => {
-          const updated = prev.map((s, idx) => {
-            // Match by ID or by index from map
-            if (
-              s.id === logData.id ||
-              (serverIndex !== undefined && idx === serverIndex)
-            ) {
-              console.log(`✅ Matched server at index ${idx}, adding log`);
-              return { ...s, logs: [...s.logs, logData.log] };
-            }
-            return s;
-          });
           console.log(
-            "📊 Updated servers state:",
-            updated.map((s) => ({ id: s.id, logsCount: s.logs.length })),
+            `🔍 Server routing: ${logData.id} -> index ${serverIndex} (from ${logData.clientIndex !== undefined ? "backend" : "map"})`,
           );
-          return updated;
-        });
-      });
+
+          setServers((prev) => {
+            const updated = prev.map((s, idx) => {
+              // Match by ID or by index (prioritize clientIndex from backend)
+              if (
+                s.id === logData.id ||
+                (serverIndex !== undefined && idx === serverIndex)
+              ) {
+                console.log(`✅ Matched server at index ${idx}, adding log`);
+                return { ...s, logs: [...s.logs, logData.log] };
+              }
+              return s;
+            });
+            console.log(
+              "📊 Updated servers state:",
+              updated.map((s) => ({ id: s.id, logsCount: s.logs.length })),
+            );
+            return updated;
+          });
+        },
+      );
     }
 
     // Listen for browser console logs

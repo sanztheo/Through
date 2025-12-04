@@ -22,6 +22,7 @@ export function registerServerHandlers() {
         data.projectPath,
         data.command,
         data.port,
+        data.index, // Pass index to ServerManager
       );
 
       // Return server with index for client-side mapping

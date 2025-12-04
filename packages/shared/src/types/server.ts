@@ -8,6 +8,7 @@ export interface ServerInstance {
   port: number;
   status: ServerStatus;
   startedAt: Date;
+  clientIndex?: number; // Optional index for frontend routing
 }
 
 export interface ProcessHandle {

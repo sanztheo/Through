@@ -11,13 +11,21 @@ import * as path from "path";
 
 export class ServerManager extends EventEmitter {
   private servers: Map<string, ServerInstance> = new Map();
+  private serverIndices: Map<string, number> = new Map(); // Store server ID -> client index mapping
 
   async startServer(
     projectPath: string,
     command: string,
     port: number,
+    clientIndex?: number,
   ): Promise<ServerInstance> {
     const id = this.generateServerId();
+
+    // Store client index if provided
+    if (clientIndex !== undefined) {
+      this.serverIndices.set(id, clientIndex);
+      console.log(`📋 Storing server index mapping: ${id} -> ${clientIndex}`);
+    }
 
     // Check if requested port is already in use, find alternative if needed
     const requestedPort = port;
@@ -71,13 +79,15 @@ export class ServerManager extends EventEmitter {
         cmd,
         args,
         (log: string, isError: boolean) => {
-          // Emit log events to IPC
+          // Emit log events to IPC with client index
           if (log.trim()) {
             console.log(`[Server ${id}] ${log}`);
+            const clientIndex = this.serverIndices.get(id);
             this.emit("server:log", {
               id,
               log: log.trim(),
               type: isError ? "stderr" : "stdout",
+              clientIndex, // Include client index for routing
             });
           }
         },
