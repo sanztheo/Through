@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   stopServer: (serverId: string) => ipcRenderer.invoke("server:stop", serverId),
   getServer: (serverId: string) => ipcRenderer.invoke("server:get", serverId),
   getAllServers: () => ipcRenderer.invoke("server:get-all"),
+  stopAllServers: () => ipcRenderer.invoke("server:stop-all"),
 
   // Server events (streaming)
   onServerReady: (callback: (server: any) => void) => {

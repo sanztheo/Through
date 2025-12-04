@@ -113,6 +113,23 @@ function ProjectContent() {
   const firstRunningServer = servers.find((s) => s.status === "running");
   const anyServerRunning = servers.some((s) => s.status === "running");
 
+  // Function to handle back navigation - stops all servers before navigating
+  const handleBackToHome = useCallback(async () => {
+    console.log("🏠 Returning to home - stopping all servers...");
+    
+    try {
+      if (api?.stopAllServers) {
+        await api.stopAllServers();
+        console.log("✅ All servers stopped successfully");
+      }
+    } catch (error) {
+      console.error("❌ Error stopping servers:", error);
+    }
+    
+    // Navigate to home page
+    router.push("/");
+  }, [api, router]);
+
   // Function to start all servers
   const startAllServers = useCallback(async () => {
     if (!api || !projectPath) return;
@@ -515,7 +532,7 @@ function ProjectContent() {
       <div className="flex items-center justify-between px-4 py-1.5 border-b border-gray-200 bg-white z-10">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => router.push("/")}
+            onClick={handleBackToHome}
             className="text-gray-600 hover:text-gray-900 transition-colors"
           >
             <svg

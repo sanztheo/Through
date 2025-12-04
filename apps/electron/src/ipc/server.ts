@@ -45,6 +45,12 @@ export function registerServerHandlers() {
     return serverManager.getAllServers();
   });
 
+  ipcMain.handle("server:stop-all", async () => {
+    console.log("IPC: Stopping all servers");
+    await serverManager.stopAllServers();
+    return { success: true };
+  });
+
   // Forward server events to renderer
   serverManager.on("server:ready", async (server) => {
     if (mainWindowWebContents) {

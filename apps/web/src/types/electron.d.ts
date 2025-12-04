@@ -33,6 +33,7 @@ export interface ElectronAPI {
     index?: number,
   ) => Promise<ServerInstance>;
   stopServer: (serverId: string) => Promise<{ success: boolean }>;
+  stopAllServers: () => Promise<{ success: boolean }>;
   getServer: (serverId: string) => Promise<ServerInstance | null>;
   getAllServers: () => Promise<ServerInstance[]>;
 
