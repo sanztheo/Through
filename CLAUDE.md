@@ -204,3 +204,4 @@ Planned but not yet implemented:
 
 Do not implement Phase 2 features unless explicitly requested.
 - @CLAUDE.md
+- Arrete de lancer le projet juste tu build rien de plus

@@ -41,12 +41,18 @@ export function ProjectSetupModal({
 
     setIsLoadingAI(true);
     try {
+      console.log("[Modal] Requesting AI suggestions for:", projectPath);
       const suggestions = await window.electronAPI.suggestCommands(projectPath);
+      console.log("[Modal] Received suggestions:", suggestions);
+
       if (suggestions && suggestions.length > 0) {
+        console.log("[Modal] Setting commands to:", suggestions);
         setCommands(suggestions);
+      } else {
+        console.warn("[Modal] No suggestions received");
       }
     } catch (error) {
-      console.error("Failed to get AI suggestions:", error);
+      console.error("[Modal] Failed to get AI suggestions:", error);
     } finally {
       setIsLoadingAI(false);
     }
