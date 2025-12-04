@@ -181,5 +181,62 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
     }
   });
 
+  // Navigate back in BrowserView
+  ipcMain.handle("browserview:go-back", async () => {
+    try {
+      if (!previewView) {
+        throw new Error("BrowserView not created");
+      }
+
+      if (previewView.webContents.canGoBack()) {
+        previewView.webContents.goBack();
+        console.log("⬅️ BrowserView navigated back");
+      }
+      return { success: true, canGoBack: previewView.webContents.canGoBack() };
+    } catch (error: any) {
+      console.error("❌ Failed to go back:", error);
+      throw new Error(`Failed to go back: ${error.message}`);
+    }
+  });
+
+  // Navigate forward in BrowserView
+  ipcMain.handle("browserview:go-forward", async () => {
+    try {
+      if (!previewView) {
+        throw new Error("BrowserView not created");
+      }
+
+      if (previewView.webContents.canGoForward()) {
+        previewView.webContents.goForward();
+        console.log("➡️ BrowserView navigated forward");
+      }
+      return {
+        success: true,
+        canGoForward: previewView.webContents.canGoForward(),
+      };
+    } catch (error: any) {
+      console.error("❌ Failed to go forward:", error);
+      throw new Error(`Failed to go forward: ${error.message}`);
+    }
+  });
+
+  // Check navigation state
+  ipcMain.handle("browserview:can-navigate", async () => {
+    try {
+      if (!previewView) {
+        throw new Error("BrowserView not created");
+      }
+
+      return {
+        success: true,
+        canGoBack: previewView.webContents.canGoBack(),
+        canGoForward: previewView.webContents.canGoForward(),
+      };
+    } catch (error: any) {
+      console.error("❌ Failed to check navigation state:", error);
+      throw new Error(`Failed to check navigation state: ${error.message}`);
+    }
+  });
+
   console.log("✅ BrowserView IPC handlers registered");
 }

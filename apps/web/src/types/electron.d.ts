@@ -69,6 +69,16 @@ export interface ElectronAPI {
   closeBrowserViewDevTools: () => Promise<{ success: boolean }>;
   destroyBrowserView: () => Promise<{ success: boolean }>;
   reloadBrowserView: () => Promise<{ success: boolean }>;
+  goBackBrowserView: () => Promise<{ success: boolean; canGoBack: boolean }>;
+  goForwardBrowserView: () => Promise<{
+    success: boolean;
+    canGoForward: boolean;
+  }>;
+  canNavigateBrowserView: () => Promise<{
+    success: boolean;
+    canGoBack: boolean;
+    canGoForward: boolean;
+  }>;
 
   // Filesystem operations
   readFile: (

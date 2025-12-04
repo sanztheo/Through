@@ -96,6 +96,8 @@ function ProjectContent() {
   const [autoStartPending, setAutoStartPending] = useState(
     autoStartParam === "true",
   );
+  const [canGoBack, setCanGoBack] = useState(false);
+  const [canGoForward, setCanGoForward] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Map server IDs to their index for log routing before IDs are assigned
@@ -326,6 +328,12 @@ function ProjectContent() {
           `🔗 Navigating embedded preview to ${firstRunningServer.url}`,
         );
         await api.navigateBrowserView(firstRunningServer.url);
+        // Check navigation state after navigation
+        if (api?.canNavigateBrowserView) {
+          const navState = await api.canNavigateBrowserView();
+          setCanGoBack(navState.canGoBack);
+          setCanGoForward(navState.canGoForward);
+        }
       } catch (error) {
         console.error("Failed to navigate BrowserView:", error);
       }
@@ -344,20 +352,39 @@ function ProjectContent() {
     if (api.onServerReady) {
       api.onServerReady((server: any) => {
         console.log("📡 Received server:ready event", server);
+
+        // Use clientIndex from backend if available, fallback to ID map
+        let serverIndex = server.clientIndex;
+        if (serverIndex === undefined) {
+          serverIndex = serverIdMapRef.current.get(server.id);
+        }
+
+        console.log(
+          `🔍 Server ready routing: ${server.id} -> index ${serverIndex} (from ${server.clientIndex !== undefined ? "backend" : "map"})`,
+        );
+
         setServers((prev) =>
-          prev.map((s) =>
-            s.id === server.id
-              ? {
-                  ...s,
-                  status: "running",
-                  url: `http://localhost:${server.port}`,
-                }
-              : s,
-          ),
+          prev.map((s, idx) => {
+            // Match by ID or by index (prioritize clientIndex from backend)
+            if (
+              s.id === server.id ||
+              (serverIndex !== undefined && idx === serverIndex)
+            ) {
+              console.log(
+                `✅ Matched server at index ${idx}, marking as running`,
+              );
+              return {
+                ...s,
+                id: server.id, // Update ID if it wasn't set
+                status: "running",
+                url: `http://localhost:${server.port}`,
+              };
+            }
+            return s;
+          }),
         );
 
         // Auto-switch to first server tab when it becomes ready
-        const serverIndex = serverIdMapRef.current.get(server.id);
         if (serverIndex === 0) {
           console.log(`🔀 Auto-switching to server-0 tab`);
           setActiveTab(`server-0`);
@@ -472,6 +499,102 @@ function ProjectContent() {
           </div>
         </div>
         <div className="flex items-center gap-2.5">
+          {/* Browser Navigation Controls */}
+          {browserViewReady && anyServerRunning && (
+            <div className="flex items-center gap-1 mr-2">
+              <button
+                onClick={async () => {
+                  if (api?.goBackBrowserView) {
+                    const result = await api.goBackBrowserView();
+                    if (api?.canNavigateBrowserView) {
+                      const navState = await api.canNavigateBrowserView();
+                      setCanGoBack(navState.canGoBack);
+                      setCanGoForward(navState.canGoForward);
+                    }
+                  }
+                }}
+                disabled={!canGoBack}
+                className={`p-1.5 rounded-md transition-colors ${
+                  canGoBack
+                    ? "hover:bg-gray-100 text-gray-700"
+                    : "text-gray-400 cursor-not-allowed"
+                }`}
+                title="Go Back"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={async () => {
+                  if (api?.goForwardBrowserView) {
+                    const result = await api.goForwardBrowserView();
+                    if (api?.canNavigateBrowserView) {
+                      const navState = await api.canNavigateBrowserView();
+                      setCanGoBack(navState.canGoBack);
+                      setCanGoForward(navState.canGoForward);
+                    }
+                  }
+                }}
+                disabled={!canGoForward}
+                className={`p-1.5 rounded-md transition-colors ${
+                  canGoForward
+                    ? "hover:bg-gray-100 text-gray-700"
+                    : "text-gray-400 cursor-not-allowed"
+                }`}
+                title="Go Forward"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+              <button
+                onClick={async () => {
+                  if (api?.reloadBrowserView) {
+                    await api.reloadBrowserView();
+                  }
+                }}
+                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-700 transition-colors"
+                title="Reload"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+              </button>
+              <div className="w-px h-5 bg-gray-300 mx-1" />
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5">
             <div
               className={`w-1.5 h-1.5 rounded-full ${

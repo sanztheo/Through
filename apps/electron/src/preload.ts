@@ -81,6 +81,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("browserview:close-devtools"),
   destroyBrowserView: () => ipcRenderer.invoke("browserview:destroy"),
   reloadBrowserView: () => ipcRenderer.invoke("browserview:reload"),
+  goBackBrowserView: () => ipcRenderer.invoke("browserview:go-back"),
+  goForwardBrowserView: () => ipcRenderer.invoke("browserview:go-forward"),
+  canNavigateBrowserView: () => ipcRenderer.invoke("browserview:can-navigate"),
 
   // Filesystem operations
   readFile: (filePath: string) => ipcRenderer.invoke("fs:read-file", filePath),

@@ -102,7 +102,10 @@ export class ServerManager extends EventEmitter {
       instance.port = detectedPort;
       instance.status = "running";
       this.servers.set(id, instance);
-      this.emit("server:ready", instance);
+
+      // Include client index in the ready event
+      const clientIndex = this.serverIndices.get(id);
+      this.emit("server:ready", { ...instance, clientIndex });
       console.log(`Server ready on port ${detectedPort}`);
 
       return instance;
