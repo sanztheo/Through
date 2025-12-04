@@ -34,43 +34,57 @@ export function ProjectSetupModal({
     setCommands([...commands, ""]);
   };
 
-  const handleCommandChange = async (index: number, value: string) => {
+  const handleCommandChange = (index: number, value: string) => {
+    // Update command immediately (no blocking)
     const updated = [...commands];
     updated[index] = value;
     setCommands(updated);
 
-    // Validate command after user types
+    // Clear previous validation timeout for this input
+    const existingTimeout = validationTimeoutRef.current.get(index);
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    // Clear validation result while typing
+    setValidationResults((prev) => {
+      const newMap = new Map(prev);
+      newMap.delete(index);
+      return newMap;
+    });
+
+    // Debounce validation (wait 800ms after user stops typing)
     if (value.trim() && typeof window !== "undefined" && window.electronAPI) {
-      try {
-        const result = await window.electronAPI.validateCommand(
-          projectPath,
-          value,
-        );
-        console.log(`[Modal] Validation result for "${value}":`, result);
+      const timeout = setTimeout(async () => {
+        try {
+          const result = await window.electronAPI.validateCommand(
+            projectPath,
+            value,
+          );
+          console.log(`[Modal] Validation result for "${value}":`, result);
 
-        // Auto-apply correction if command has issues
-        if (!result.valid && result.corrected !== value) {
-          console.log(`[Modal] Auto-correcting to: "${result.corrected}"`);
-          updated[index] = result.corrected;
-          setCommands(updated);
+          // Auto-apply correction if command has issues
+          if (!result.valid && result.corrected !== value) {
+            console.log(`[Modal] Auto-correcting to: "${result.corrected}"`);
+            setCommands((prevCommands) => {
+              const newCommands = [...prevCommands];
+              newCommands[index] = result.corrected;
+              return newCommands;
+            });
+          }
+
+          // Store validation result
+          setValidationResults((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(index, result);
+            return newMap;
+          });
+        } catch (error) {
+          console.error("[Modal] Validation error:", error);
         }
+      }, 800);
 
-        // Store validation result
-        setValidationResults((prev) => {
-          const newMap = new Map(prev);
-          newMap.set(index, result);
-          return newMap;
-        });
-      } catch (error) {
-        console.error("[Modal] Validation error:", error);
-      }
-    } else {
-      // Clear validation for empty commands
-      setValidationResults((prev) => {
-        const newMap = new Map(prev);
-        newMap.delete(index);
-        return newMap;
-      });
+      validationTimeoutRef.current.set(index, timeout);
     }
   };
 
