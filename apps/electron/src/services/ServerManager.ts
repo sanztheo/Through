@@ -7,6 +7,7 @@ import {
 } from "@through/native";
 import { EventEmitter } from "events";
 import type { ServerInstance } from "@through/shared";
+import * as path from "path";
 
 export class ServerManager extends EventEmitter {
   private servers: Map<string, ServerInstance> = new Map();
@@ -34,15 +35,29 @@ export class ServerManager extends EventEmitter {
 
     console.log(`Starting server: ${command} on port ${actualPort}`);
 
-    // Parse command into executable and args
-    const [cmd, ...args] = command.split(" ");
+    // Parse command: handle "cd folder && npm run dev" format
+    let workingDir = projectPath;
+    let actualCommand = command;
+
+    // Check if command starts with "cd"
+    const cdMatch = command.match(/^cd\s+([^\s&|]+)\s*(?:&&|&)\s*(.+)$/);
+    if (cdMatch) {
+      const targetDir = cdMatch[1];
+      actualCommand = cdMatch[2];
+      workingDir = path.join(projectPath, targetDir);
+      console.log(`   → Changed directory to: ${workingDir}`);
+      console.log(`   → Actual command: ${actualCommand}`);
+    }
+
+    // Parse actual command into executable and args
+    const [cmd, ...args] = actualCommand.split(" ");
 
     // Add port argument to the command
     // For npm/yarn: add -- --port <actualPort> or -- -p <actualPort>
     if (cmd === "npm" || cmd === "yarn" || cmd === "pnpm") {
       args.push("--");
       // Detect framework to use correct port flag
-      if (command.includes("vite") || command.includes("dev")) {
+      if (actualCommand.includes("vite") || actualCommand.includes("dev")) {
         args.push("--port", actualPort.toString());
       } else {
         args.push("-p", actualPort.toString());
@@ -52,7 +67,7 @@ export class ServerManager extends EventEmitter {
     try {
       // Spawn using Rust NAPI with live log streaming
       const handle = spawnDevServerWithLogs(
-        projectPath,
+        workingDir, // Use the parsed working directory
         cmd,
         args,
         (log: string, isError: boolean) => {
