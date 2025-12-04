@@ -1027,61 +1027,52 @@ function ProjectContent() {
         </div>
       </div>
 
-      {/* Main Content - Full Screen Preview */}
-      <div className="flex-1 relative overflow-hidden">
-        {/* Browser Preview */}
-        <div ref={previewContainerRef} className="absolute inset-0 bg-white">
-          {!browserViewReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <div className="text-center">
-                <svg
-                  className="w-16 h-16 mx-auto mb-4 text-gray-400 animate-pulse"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <p className="text-gray-600">Initializing preview...</p>
+      {/* Main Content - Flex Layout (no more overlay!) */}
+      <div className="flex-1 flex relative overflow-hidden">
+        {/* Browser Preview with iframe (integrated in layout) */}
+        {viewMode === "browser" && (
+          <div className="flex-1 flex flex-col bg-white">
+            {firstRunningServer?.url ? (
+              <iframe
+                src={firstRunningServer.url}
+                className="flex-1 w-full border-none"
+                title="Dev Server Preview"
+              />
+            ) : (
+              <div className="flex-1 flex items-center justify-center bg-gray-100">
+                <div className="text-center">
+                  <svg
+                    className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <p className="text-gray-600">
+                    {servers.some((s) => s.status === "starting")
+                      ? "Starting server..."
+                      : "Waiting for servers..."}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-          {browserViewReady && !firstRunningServer && (
-            <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-              <div className="text-center">
-                <svg
-                  className="w-16 h-16 mx-auto mb-4 text-yellow-500 animate-pulse"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-                <p className="text-gray-600">Waiting for servers...</p>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
-        {/* Code Editor Panel - shown when files are open */}
-        {editorTabs.length > 0 && viewMode === "editor" && (
-          <div className="absolute inset-0 z-10 bg-white">
+        {/* Code Editor Panel - shown when in editor mode */}
+        {viewMode === "editor" && editorTabs.length > 0 && (
+          <div className="flex-1 bg-white">
             <CodeEditorPanel
               tabs={editorTabs}
               activeTabId={activeEditorTabId}
               onTabClick={(tabId) => {
                 setActiveEditorTabId(tabId);
-                setViewMode("editor");
               }}
               onTabClose={handleEditorTabClose}
               onContentChange={handleEditorContentChange}
