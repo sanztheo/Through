@@ -63,6 +63,9 @@ function ProjectContent() {
 
   // Map server IDs to their index for log routing before IDs are assigned
   const serverIdMapRef = useRef<Map<string, number>>(new Map());
+  
+  // Track content synchronously to avoid stale state during save
+  const contentMapRef = useRef<Map<string, string>>(new Map());
 
   // Derived state
   const firstRunningServer = servers.find((s) => s.status === "running");
@@ -254,6 +257,9 @@ function ProjectContent() {
             isModified: false,
           };
 
+          // Initialize content map
+          contentMapRef.current.set(newTab.id, result.content);
+
           setEditorTabs((prev) => [...prev, newTab]);
           setActiveEditorTabId(newTab.id);
           setViewMode("editor");
@@ -270,6 +276,9 @@ function ProjectContent() {
   // Handle editor content change
   const handleEditorContentChange = useCallback(
     (tabId: string, content: string) => {
+      // Update ref immediately
+      contentMapRef.current.set(tabId, content);
+      
       setEditorTabs((prev) =>
         prev.map((tab) =>
           tab.id === tabId
@@ -289,12 +298,19 @@ function ProjectContent() {
   const handleEditorTabClose = useCallback(
     (tabId: string) => {
       const tab = editorTabs.find((t) => t.id === tabId);
-      if (tab?.isModified) {
+      // Check content from ref if available for most up-to-date check
+      const currentContent = contentMapRef.current.get(tabId);
+      const isModified = currentContent !== undefined && tab ? currentContent !== tab.originalContent : tab?.isModified;
+
+      if (isModified) {
         const confirm = window.confirm(
-          `${tab.filename} has unsaved changes. Close anyway?`,
+          `${tab?.filename} has unsaved changes. Close anyway?`,
         );
         if (!confirm) return;
       }
+
+      // Cleanup ref
+      contentMapRef.current.delete(tabId);
 
       setEditorTabs((prev) => prev.filter((t) => t.id !== tabId));
 
@@ -327,22 +343,34 @@ function ProjectContent() {
         return;
       }
 
+      // Get tab metadata from state, but CONTENT from ref
+      // We use editorTabsRef (from previous fix) to get the tab object without stale closure
+      // But we use contentMapRef to get the absolute latest content
       const tab = editorTabsRef.current.find((t) => t.id === tabId);
+      
       if (!tab) {
         console.error("❌ Tab not found:", tabId);
         return;
       }
 
+      const contentToSave = contentMapRef.current.get(tabId);
+      
+      if (contentToSave === undefined) {
+        console.error("❌ Content not found in ref for tab:", tabId);
+        // Fallback to tab.content if ref is missing (shouldn't happen)
+        return; 
+      }
+
       console.log("📝 Writing file:", tab.path);
       try {
-        const result = await api.writeFile(tab.path, tab.content);
+        const result = await api.writeFile(tab.path, contentToSave);
         console.log("📝 Write result:", result);
         
         if (result.success) {
           setEditorTabs((prev) =>
             prev.map((t) =>
               t.id === tabId
-                ? { ...t, originalContent: t.content, isModified: false }
+                ? { ...t, content: contentToSave, originalContent: contentToSave, isModified: false }
                 : t,
             ),
           );
@@ -354,7 +382,7 @@ function ProjectContent() {
         console.error("❌ Exception saving file:", err);
       }
     },
-    [api], // Removed editorTabs dependency since we use ref
+    [api], 
   );
 
   // Sync BrowserView bounds with the placeholder container

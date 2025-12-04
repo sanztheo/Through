@@ -24,16 +24,25 @@ export function CodeEditorPanel({
 }: CodeEditorPanelProps) {
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
+  // Use refs to track latest props for Monaco command (which captures closure once)
+  const activeTabIdRef = React.useRef(activeTabId);
+  const onSaveRef = React.useRef(onSave);
+
+  React.useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+    onSaveRef.current = onSave;
+  }, [activeTabId, onSave]);
+
   const handleEditorDidMount = useCallback(
     (editor: any, monaco: any) => {
       // Add Cmd+S / Ctrl+S shortcut
       editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-        if (activeTabId) {
-          onSave(activeTabId);
+        if (activeTabIdRef.current) {
+          onSaveRef.current(activeTabIdRef.current);
         }
       });
     },
-    [activeTabId, onSave],
+    [],
   );
 
   if (tabs.length === 0) {
