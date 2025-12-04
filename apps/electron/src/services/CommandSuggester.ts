@@ -1,4 +1,4 @@
-import { analyzeProjectFiles } from "@through/native";
+import { analyzeProjectFiles, listProjectFiles } from "@through/native";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
@@ -17,34 +17,57 @@ export class CommandSuggester {
   }
 
   private async analyzeProject(projectPath: string) {
-    console.log("[Step 1] Analyzing project files with Rust...");
+    console.log("[Step 1] Analyzing project structure with Rust...");
 
-    let fileAnalysis;
+    // Use Rust to list all files and find package.json locations
+    const allPackageJsons: Array<{ dir: string; packageJson: any }> = [];
+
     try {
-      fileAnalysis = analyzeProjectFiles(projectPath);
+      const files = listProjectFiles(projectPath, 3);
+      console.log(
+        `[Step 2] Found ${files.length} top-level items, searching for package.json files...`,
+      );
+
+      // Recursive function to find all package.json files
+      const findPackageJsons = (nodes: any[], currentPath: string) => {
+        for (const node of nodes) {
+          const nodePath = path.join(currentPath, node.name);
+
+          if (node.type === "file" && node.name === "package.json") {
+            try {
+              const content = fs.readFileSync(nodePath, "utf-8");
+              const parsed = JSON.parse(content);
+              const relativeDir = path.relative(
+                projectPath,
+                path.dirname(nodePath),
+              );
+              allPackageJsons.push({
+                dir: relativeDir || ".",
+                packageJson: parsed,
+              });
+              console.log(
+                `   ✓ Found package.json in: ${relativeDir || "root"}`,
+              );
+            } catch (error) {
+              console.error(`   ✗ Failed to read ${nodePath}:`, error);
+            }
+          }
+
+          if (node.type === "folder" && node.children) {
+            findPackageJsons(node.children, nodePath);
+          }
+        }
+      };
+
+      findPackageJsons(files, projectPath);
+      console.log(
+        `[Step 3] Total package.json files found: ${allPackageJsons.length}`,
+      );
     } catch (error) {
       console.error("Rust analysis error:", error);
-      fileAnalysis = {
-        hasPackageJson: false,
-        dependencies: [],
-        fileCount: 0,
-      };
     }
 
-    console.log("[Step 2] Reading package.json...");
-    let packageJson: any = {};
-
-    if (fileAnalysis.hasPackageJson) {
-      try {
-        const packagePath = path.join(projectPath, "package.json");
-        const packageContent = fs.readFileSync(packagePath, "utf-8");
-        packageJson = JSON.parse(packageContent);
-      } catch (error) {
-        console.error("Failed to read package.json:", error);
-      }
-    }
-
-    return { fileAnalysis, packageJson };
+    return { allPackageJsons };
   }
 
   private detectFrameworks(dependencies: string[]): string[] {
@@ -81,36 +104,71 @@ export class CommandSuggester {
     console.log(`[CommandSuggester] Analyzing project: ${projectPath}`);
 
     try {
-      const { fileAnalysis, packageJson } =
-        await this.analyzeProject(projectPath);
+      const { allPackageJsons } = await this.analyzeProject(projectPath);
 
-      console.log("[Step 3] AI analyzing to suggest commands...");
+      if (allPackageJsons.length === 0) {
+        console.log("[CommandSuggester] No package.json found");
+        return [];
+      }
 
-      const scripts = packageJson?.scripts || {};
-      const dependencies = [
-        ...Object.keys(packageJson?.dependencies || {}),
-        ...Object.keys(packageJson?.devDependencies || {}),
-      ];
+      console.log("[Step 4] AI analyzing to suggest commands...");
 
-      const frameworks = this.detectFrameworks(dependencies);
+      // Build context for ALL packages, let AI decide which are relevant
+      const packageContexts = allPackageJsons.map((pkg) => ({
+        directory: pkg.dir,
+        scripts: pkg.packageJson.scripts || {},
+        dependencies: [
+          ...Object.keys(pkg.packageJson.dependencies || {}),
+          ...Object.keys(pkg.packageJson.devDependencies || {}),
+        ],
+        frameworks: this.detectFrameworks([
+          ...Object.keys(pkg.packageJson.dependencies || {}),
+          ...Object.keys(pkg.packageJson.devDependencies || {}),
+        ]),
+      }));
 
-      const prompt = `You are a development environment expert. Analyze this project and suggest the EXACT commands to start development servers.
+      const prompt = `You are a development environment expert. Analyze this project and suggest the EXACT commands to start the MAIN development servers ONLY.
 
-Project Analysis:
-- Has package.json: ${fileAnalysis.hasPackageJson}
-- Detected frameworks: ${frameworks.join(", ") || "None"}
-- Available scripts: ${JSON.stringify(scripts, null, 2)}
-- Dependencies: ${dependencies.slice(0, 15).join(", ")}
+Project Structure (${allPackageJsons.length} packages found):
+${packageContexts
+  .map(
+    (ctx, i) => `
+Package ${i + 1} (${ctx.directory === "." ? "root" : ctx.directory}):
+- Frameworks: ${ctx.frameworks.join(", ") || "None"}
+- Scripts: ${JSON.stringify(ctx.scripts, null, 2)}
+- Key deps: ${ctx.dependencies.slice(0, 10).join(", ")}
+`,
+  )
+  .join("\n")}
 
-Instructions:
-1. Suggest commands to start development (1-2 commands max)
-2. Use EXACT script names from package.json
-3. If monorepo: suggest separate frontend/backend commands
-4. Return ONLY valid JSON
+Operating System: ${this.platform === "darwin" ? "macOS" : this.platform === "win32" ? "Windows" : "Linux"}
+
+CRITICAL INSTRUCTIONS:
+1. ONLY suggest commands for MAIN application packages (frontend, backend, web, api, server, app)
+2. IGNORE test/docs/examples/playground/demo/shared packages - these are NOT main servers
+3. Maximum 2-3 commands (typically 1 frontend + 1 backend)
+4. Use correct OS syntax:
+   - macOS/Linux: cd folder && npm run dev
+   - Windows: cd folder & npm run dev
+5. If root directory: just "npm run dev" (no cd)
+6. Order: frontend first, then backend
+7. Return ONLY valid JSON
+
+Example good output:
+{
+  "commands": ["cd pen-frontend && npm run dev", "cd pen-backend && npm start"],
+  "reasoning": "Frontend React app and backend Express API - main application servers"
+}
+
+Example bad output (DON'T DO THIS):
+{
+  "commands": ["cd docs && npm run dev", "cd tests && npm run test", ...],
+  "reasoning": "..."
+}
 
 Return JSON format:
 {
-  "commands": ["npm run dev"],
+  "commands": ["cd frontend && npm run dev"],
   "reasoning": "Brief explanation"
 }`;
 
@@ -128,18 +186,33 @@ Return JSON format:
       console.log("[CommandSuggester] Suggested:", commands);
       console.log("[CommandSuggester] Reasoning:", parsed.reasoning);
 
-      return commands.length > 0 ? commands : this.fallbackCommands(scripts);
+      return commands.length > 0
+        ? commands
+        : this.fallbackFromAllPackages(packageContexts);
     } catch (error) {
       console.error("[CommandSuggester] Error:", error);
-      return ["npm run dev"];
+      return [];
     }
   }
 
-  private fallbackCommands(scripts: Record<string, string>): string[] {
-    if (scripts.dev) return ["npm run dev"];
-    if (scripts.start) return ["npm start"];
-    if (scripts["dev:web"]) return ["npm run dev:web"];
-    return []; // Ne rien suggérer si vraiment aucun script
+  private fallbackFromAllPackages(
+    contexts: Array<{ directory: string; scripts: Record<string, string> }>,
+  ): string[] {
+    const commands: string[] = [];
+
+    for (const ctx of contexts) {
+      const separator = this.platform === "win32" ? " & " : " && ";
+      const cdPrefix =
+        ctx.directory === "." ? "" : `cd ${ctx.directory}${separator}`;
+
+      if (ctx.scripts.dev) {
+        commands.push(`${cdPrefix}npm run dev`);
+      } else if (ctx.scripts.start) {
+        commands.push(`${cdPrefix}npm start`);
+      }
+    }
+
+    return commands;
   }
 
   /**
