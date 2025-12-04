@@ -74,7 +74,9 @@ function ProjectContent() {
   const commandsParam = searchParams.get("commands");
   const { api } = useElectronAPI();
 
-  const commands = commandsParam ? commandsParam.split(",") : [];
+  const [commands, setCommands] = useState<string[]>(
+    commandsParam ? commandsParam.split(",") : [],
+  );
   const [servers, setServers] = useState<ServerInstance[]>(
     commands.map((cmd) => ({
       id: "",
@@ -112,6 +114,38 @@ function ProjectContent() {
       }
     }
   }, [projectPath]);
+
+  // Load commands from cache if not in URL
+  useEffect(() => {
+    const loadCommandsFromCache = async () => {
+      if (!projectPath || commandsParam || !api?.analyzeProject) return;
+
+      try {
+        console.log("[Project] Loading commands from cache for:", projectPath);
+        const analysis = await api.analyzeProject(projectPath);
+
+        // Check if cache entry has commands
+        if (analysis.commands && analysis.commands.length > 0) {
+          console.log("[Project] Found cached commands:", analysis.commands);
+          setCommands(analysis.commands);
+
+          // Initialize servers with cached commands
+          setServers(
+            analysis.commands.map((cmd) => ({
+              id: "",
+              command: cmd,
+              status: "idle",
+              logs: [],
+            })),
+          );
+        }
+      } catch (error) {
+        console.error("[Project] Failed to load commands from cache:", error);
+      }
+    };
+
+    loadCommandsFromCache();
+  }, [projectPath, commandsParam, api]);
 
   // Initialize BrowserView for embedded preview
   useEffect(() => {

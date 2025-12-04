@@ -25,7 +25,11 @@ export function registerProjectHandlers() {
     const cached = await cache.get(projectPath);
     if (cached && cache.isValid(cached)) {
       console.log("IPC: Returning cached analysis");
-      return { ...cached.analysis, fromCache: true };
+      return {
+        ...cached.analysis,
+        fromCache: true,
+        commands: cached.commands || [],
+      };
     }
 
     // Perform analysis (calls Rust NAPI + OpenAI)
@@ -35,7 +39,11 @@ export function registerProjectHandlers() {
     // Cache result
     await cache.set(projectPath, analysis);
 
-    return { ...analysis, fromCache: false };
+    return {
+      ...analysis,
+      fromCache: false,
+      commands: [],
+    };
   });
 
   ipcMain.handle(
@@ -86,6 +94,21 @@ export function registerProjectHandlers() {
         return result;
       } catch (error) {
         console.error("Error validating command:", error);
+        throw error;
+      }
+    },
+  );
+
+  // New handler: Save commands to cache
+  ipcMain.handle(
+    "project:save-commands",
+    async (event, projectPath: string, commands: string[]) => {
+      console.log(`IPC: Saving commands for ${projectPath}:`, commands);
+      try {
+        await cache.updateCommands(projectPath, commands);
+        return { success: true };
+      } catch (error) {
+        console.error("Error saving commands:", error);
         throw error;
       }
     },

@@ -16,6 +16,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("project:suggest-commands", path),
   validateCommand: (path: string, command: string) =>
     ipcRenderer.invoke("project:validate-command", path, command),
+  saveCommands: (path: string, commands: string[]) =>
+    ipcRenderer.invoke("project:save-commands", path, commands),
 
   // Server operations
   startServer: (

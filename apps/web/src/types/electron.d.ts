@@ -12,7 +12,7 @@ export interface ElectronAPI {
   selectFolder: () => Promise<string | null>;
   analyzeProject: (
     path: string,
-  ) => Promise<ProjectAnalysis & { fromCache: boolean }>;
+  ) => Promise<ProjectAnalysis & { fromCache: boolean; commands: string[] }>;
   invalidateCache: (path: string) => Promise<{ success: boolean }>;
   listProjectFiles: (path: string) => Promise<FileNode[]>;
   suggestCommands: (path: string) => Promise<string[]>;
@@ -20,6 +20,10 @@ export interface ElectronAPI {
     path: string,
     command: string,
   ) => Promise<{ valid: boolean; corrected: string; issues: string[] }>;
+  saveCommands: (
+    path: string,
+    commands: string[],
+  ) => Promise<{ success: boolean }>;
 
   // Server operations
   startServer: (

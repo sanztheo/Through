@@ -152,7 +152,7 @@ export default function HomePage() {
               <div className="w-6 h-6 bg-white rounded-full"></div>
             </div>
             <h1 className="text-5xl font-bold tracking-tight text-black">
-              Inspector
+              Through
             </h1>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">

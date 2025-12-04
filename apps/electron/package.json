@@ -1,5 +1,6 @@
 {
   "name": "@through/electron",
+  "productName": "Through",
   "version": "0.1.0",
   "description": "Electron main process for Through app",
   "main": "build/main.js",

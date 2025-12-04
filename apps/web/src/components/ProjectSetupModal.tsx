@@ -116,9 +116,20 @@ export function ProjectSetupModal({
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const validCommands = commands.filter((cmd) => cmd.trim() !== "");
     if (validCommands.length === 0) return;
+
+    // Save commands to cache
+    if (typeof window !== "undefined" && window.electronAPI) {
+      try {
+        await window.electronAPI.saveCommands(projectPath, validCommands);
+        console.log("[Modal] Commands saved to cache:", validCommands);
+      } catch (error) {
+        console.error("[Modal] Failed to save commands:", error);
+      }
+    }
+
     onSubmit(validCommands);
   };
 
