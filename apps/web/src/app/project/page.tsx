@@ -4,60 +4,9 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Terminal } from "lucide-react";
+import { TerminalPanel } from "@/components/terminal";
 
-// Parse ANSI color codes and emojis to styled HTML
-function parseLogLine(text: string): React.ReactNode[] {
-  const ansiRegex = /\u001b\[(\d+)m/g;
-  const parts: React.ReactNode[] = [];
-  let lastIndex = 0;
-  let currentColor = "";
 
-  const colorMap: Record<string, string> = {
-    "30": "text-black",
-    "31": "text-red-600",
-    "32": "text-green-600",
-    "33": "text-yellow-700",
-    "34": "text-blue-600",
-    "35": "text-purple-600",
-    "36": "text-cyan-600",
-    "37": "text-gray-700",
-    "90": "text-gray-600",
-    "91": "text-red-700",
-    "92": "text-green-700",
-    "93": "text-yellow-800",
-    "94": "text-blue-700",
-    "95": "text-purple-700",
-    "96": "text-cyan-700",
-    "97": "text-gray-900",
-    "0": "text-black", // reset to black
-  };
-
-  let match;
-  while ((match = ansiRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      const textPart = text.slice(lastIndex, match.index);
-      parts.push(
-        <span key={lastIndex} className={currentColor}>
-          {textPart}
-        </span>,
-      );
-    }
-
-    const code = match[1];
-    currentColor = colorMap[code] || "";
-    lastIndex = match.index + match[0].length;
-  }
-
-  if (lastIndex < text.length) {
-    parts.push(
-      <span key={lastIndex} className={currentColor}>
-        {text.slice(lastIndex)}
-      </span>,
-    );
-  }
-
-  return parts.length > 0 ? parts : [text];
-}
 
 interface ServerInstance {
   id: string;
@@ -92,7 +41,6 @@ function ProjectContent() {
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>("devtools");
   const [autoStartPending, setAutoStartPending] = useState(
     autoStartParam === "true",
   );
@@ -487,11 +435,7 @@ function ProjectContent() {
           }),
         );
 
-        // Auto-switch to first server tab when it becomes ready
-        if (serverIndex === 0) {
-          console.log(`🔀 Auto-switching to server-0 tab`);
-          setActiveTab(`server-0`);
-        }
+        // Terminal panel manages its own active tab internally
       });
     }
 
@@ -975,166 +919,14 @@ function ProjectContent() {
         </div>
 
         {/* Terminal Sidebar */}
-        <div
-          className={`absolute top-0 left-0 h-full w-96 bg-gray-50 border-r border-gray-200 transition-transform duration-300 ease-in-out z-20 shadow-xl ${
-            showTerminal ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="flex flex-col h-full">
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white">
-              <h2 className="text-gray-900 font-semibold text-sm">Terminal</h2>
-              <button
-                onClick={() => setShowTerminal(false)}
-                className="text-gray-500 hover:text-gray-900 transition-colors p-1 rounded-md hover:bg-gray-100"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
-              </button>
-            </div>
-
-            {/* Tabs */}
-            <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
-              <button
-                onClick={() => setActiveTab("devtools")}
-                className={`px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                  activeTab === "devtools"
-                    ? "text-gray-900 border-b-2 border-gray-900 bg-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                DevTools
-              </button>
-              {servers.map((server, index) => (
-                <button
-                  key={index}
-                  onClick={() => setActiveTab(`server-${index}`)}
-                  className={`px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                    activeTab === `server-${index}`
-                      ? "text-gray-900 border-b-2 border-gray-900 bg-white"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5">
-                    <div
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        server.status === "running"
-                          ? "bg-green-500"
-                          : server.status === "starting"
-                            ? "bg-yellow-500"
-                            : server.status === "error"
-                              ? "bg-red-500"
-                              : "bg-gray-400"
-                      }`}
-                    />
-                    Server {index + 1}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-white">
-              {activeTab === "devtools" ? (
-                <>
-                  {devToolsLogs.map((log, index) => (
-                    <div
-                      key={index}
-                      className={`mb-1 leading-relaxed ${
-                        log.type === "error"
-                          ? "text-red-600"
-                          : log.type === "warning"
-                            ? "text-yellow-700"
-                            : log.type === "debug"
-                              ? "text-blue-600"
-                              : "text-black"
-                      }`}
-                    >
-                      <span className="text-gray-600 mr-2">[{log.type}]</span>
-                      {log.message}
-                    </div>
-                  ))}
-                  {devToolsLogs.length === 0 && (
-                    <div className="text-gray-500 text-sm">
-                      No console logs yet. Open your app in the preview to see
-                      console output.
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {servers.map((server, index) =>
-                    activeTab === `server-${index}` ? (
-                      <div key={index}>
-                        <div className="mb-2 pb-2 border-b border-gray-200 flex items-start justify-between">
-                          <div>
-                            <div className="text-gray-700 text-xs font-semibold mb-1">
-                              Command: {server.command}
-                            </div>
-                            {server.url && (
-                              <div className="text-blue-600 text-xs">
-                                URL: {server.url}
-                              </div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => restartServer(index)}
-                            disabled={server.status === "starting"}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                              server.status === "starting"
-                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                                : "bg-orange-100 text-orange-700 hover:bg-orange-200"
-                            }`}
-                            title="Stop and restart this server"
-                          >
-                            <svg
-                              className={`w-3.5 h-3.5 ${server.status === "starting" ? "animate-spin" : ""}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                              />
-                            </svg>
-                            {server.status === "starting" ? "Restarting..." : "Restart"}
-                          </button>
-                        </div>
-                        {server.logs.map((log, logIndex) => (
-                          <div
-                            key={logIndex}
-                            className="mb-1 leading-relaxed font-mono text-sm text-black"
-                          >
-                            {parseLogLine(log)}
-                          </div>
-                        ))}
-                        {server.logs.length === 0 && (
-                          <div className="text-gray-500 text-sm">
-                            No logs yet for this server.
-                          </div>
-                        )}
-                      </div>
-                    ) : null,
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
+        <TerminalPanel
+          isOpen={showTerminal}
+          onClose={() => setShowTerminal(false)}
+          servers={servers}
+          devToolsLogs={devToolsLogs}
+          projectPath={projectPath || ""}
+          onRestartServer={restartServer}
+        />
       </div>
     </div>
   );
