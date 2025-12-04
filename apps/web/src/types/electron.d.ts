@@ -1,5 +1,12 @@
 import type { ProjectAnalysis, ServerInstance } from "@through/shared";
 
+export interface FileNode {
+  name: string;
+  path: string;
+  type: "file" | "folder";
+  children?: FileNode[];
+}
+
 export interface ElectronAPI {
   // Project operations
   selectFolder: () => Promise<string | null>;
@@ -7,6 +14,8 @@ export interface ElectronAPI {
     path: string,
   ) => Promise<ProjectAnalysis & { fromCache: boolean }>;
   invalidateCache: (path: string) => Promise<{ success: boolean }>;
+  listProjectFiles: (path: string) => Promise<FileNode[]>;
+  suggestCommands: (path: string) => Promise<string[]>;
 
   // Server operations
   startServer: (

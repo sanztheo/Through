@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   analyzeProject: (path: string) => ipcRenderer.invoke("project:analyze", path),
   invalidateCache: (path: string) =>
     ipcRenderer.invoke("project:invalidate-cache", path),
+  listProjectFiles: (path: string) =>
+    ipcRenderer.invoke("project:list-files", path),
+  suggestCommands: (path: string) =>
+    ipcRenderer.invoke("project:suggest-commands", path),
 
   // Server operations
   startServer: (projectPath: string, command: string, port: number) =>

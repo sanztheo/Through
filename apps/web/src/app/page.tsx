@@ -6,6 +6,7 @@ import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Folder, GitBranch } from "lucide-react";
 import { ProjectList } from "@/components/ProjectList";
 import { ContextMenu } from "@/components/ContextMenu";
+import { ProjectSetupModal } from "@/components/ProjectSetupModal";
 
 interface ProjectInfo {
   path: string;
@@ -26,6 +27,10 @@ export default function HomePage() {
     x: number;
     y: number;
     project: ProjectInfo;
+  } | null>(null);
+  const [selectedProject, setSelectedProject] = useState<{
+    path: string;
+    name: string;
   } | null>(null);
 
   useEffect(() => {
@@ -65,28 +70,42 @@ export default function HomePage() {
       const folderPath = await api.selectFolder();
 
       if (folderPath) {
-        const analysis = await api.analyzeProject(folderPath);
-        console.log("Analysis result:", analysis);
-
-        const projectInfo: ProjectInfo = {
-          path: analysis.projectPath,
-          name: analysis.projectPath.split("/").pop() || "Unknown",
-          framework: analysis.detection.framework,
-          startCommand: analysis.detection.startCommand,
-          port: analysis.detection.defaultPort,
-          analyzedAt: analysis.analyzedAt,
-        };
-
-        saveProject(projectInfo);
-        router.push(
-          `/project?path=${encodeURIComponent(analysis.projectPath)}`,
-        );
+        const projectName = folderPath.split("/").pop() || "Unknown";
+        setSelectedProject({ path: folderPath, name: projectName });
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to select folder");
       console.error("Error selecting folder:", err);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleProjectSetupSubmit = async (commands: string[]) => {
+    if (!selectedProject || !api) return;
+
+    try {
+      // Save project to recent list
+      const projectInfo: ProjectInfo = {
+        path: selectedProject.path,
+        name: selectedProject.name,
+        framework: "Custom", // Will be detected by commands
+        startCommand: commands[0] || "npm run dev",
+        port: 3000, // Default port
+        analyzedAt: new Date().toISOString(),
+      };
+
+      saveProject(projectInfo);
+
+      // Navigate to project page with commands
+      const searchParams = new URLSearchParams({
+        path: selectedProject.path,
+        commands: commands.join(","),
+      });
+      router.push(`/project?${searchParams.toString()}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to setup project");
+      console.error("Error setting up project:", err);
     }
   };
 
@@ -209,6 +228,16 @@ export default function HomePage() {
           y={contextMenu.y}
           onDelete={() => handleDeleteProject(contextMenu.project)}
           onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      {/* Project Setup Modal */}
+      {selectedProject && (
+        <ProjectSetupModal
+          projectPath={selectedProject.path}
+          projectName={selectedProject.name}
+          onClose={() => setSelectedProject(null)}
+          onSubmit={handleProjectSetupSubmit}
         />
       )}
     </main>

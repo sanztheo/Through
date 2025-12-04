@@ -2,7 +2,7 @@ use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[napi(object)]
@@ -121,6 +121,158 @@ pub fn analyze_project_files(project_path: String) -> Result<FileAnalysis> {
     }
 
     Ok(analysis)
+}
+
+#[napi(object)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileNode {
+    pub name: String,
+    pub path: String,
+    pub r#type: String,
+    pub children: Option<Vec<FileNode>>,
+}
+
+/// List project files in tree structure for file explorer
+///
+/// # Arguments
+/// * `project_path` - Root path of the project
+/// * `max_depth` - Maximum depth to traverse (default: 3)
+///
+/// # Returns
+/// * `Result<Vec<FileNode>>` - Tree structure of files and folders
+#[napi]
+pub fn list_project_files(project_path: String, max_depth: Option<u32>) -> Result<Vec<FileNode>> {
+    let path = Path::new(&project_path);
+    let depth_limit = max_depth.unwrap_or(3);
+
+    if !path.exists() {
+        return Err(Error::new(
+            Status::InvalidArg,
+            format!("Project path does not exist: {}", project_path),
+        ));
+    }
+
+    if !path.is_dir() {
+        return Err(Error::new(
+            Status::InvalidArg,
+            format!("Project path is not a directory: {}", project_path),
+        ));
+    }
+
+    let mut root_nodes = Vec::new();
+
+    // Read immediate children of root directory
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+
+                // Skip hidden files and common ignored directories
+                if file_name.starts_with('.')
+                    || matches!(
+                        file_name.as_str(),
+                        "node_modules" | "target" | "dist" | "build" | ".next" | "out" | "__pycache__" | ".venv" | "venv"
+                    ) {
+                    continue;
+                }
+
+                let node_path = entry.path().to_string_lossy().to_string();
+
+                if file_type.is_dir() {
+                    let children = if depth_limit > 1 {
+                        Some(read_directory(&entry.path(), 1, depth_limit)?)
+                    } else {
+                        Some(Vec::new())
+                    };
+
+                    root_nodes.push(FileNode {
+                        name: file_name,
+                        path: node_path,
+                        r#type: "folder".to_string(),
+                        children,
+                    });
+                } else if file_type.is_file() {
+                    root_nodes.push(FileNode {
+                        name: file_name,
+                        path: node_path,
+                        r#type: "file".to_string(),
+                        children: None,
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort: folders first, then files, both alphabetically
+    root_nodes.sort_by(|a, b| {
+        match (a.r#type.as_str(), b.r#type.as_str()) {
+            ("folder", "file") => std::cmp::Ordering::Less,
+            ("file", "folder") => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
+
+    Ok(root_nodes)
+}
+
+fn read_directory(path: &PathBuf, current_depth: u32, max_depth: u32) -> Result<Vec<FileNode>> {
+    let mut nodes = Vec::new();
+
+    if current_depth >= max_depth {
+        return Ok(nodes);
+    }
+
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                let file_name = entry.file_name().to_string_lossy().to_string();
+
+                // Skip hidden files and ignored directories
+                if file_name.starts_with('.')
+                    || matches!(
+                        file_name.as_str(),
+                        "node_modules" | "target" | "dist" | "build" | ".next" | "out" | "__pycache__" | ".venv" | "venv"
+                    ) {
+                    continue;
+                }
+
+                let node_path = entry.path().to_string_lossy().to_string();
+
+                if file_type.is_dir() {
+                    let children = if current_depth + 1 < max_depth {
+                        Some(read_directory(&entry.path(), current_depth + 1, max_depth)?)
+                    } else {
+                        Some(Vec::new())
+                    };
+
+                    nodes.push(FileNode {
+                        name: file_name,
+                        path: node_path,
+                        r#type: "folder".to_string(),
+                        children,
+                    });
+                } else if file_type.is_file() {
+                    nodes.push(FileNode {
+                        name: file_name,
+                        path: node_path,
+                        r#type: "file".to_string(),
+                        children: None,
+                    });
+                }
+            }
+        }
+    }
+
+    // Sort: folders first, then files
+    nodes.sort_by(|a, b| {
+        match (a.r#type.as_str(), b.r#type.as_str()) {
+            ("folder", "file") => std::cmp::Ordering::Less,
+            ("file", "folder") => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
+
+    Ok(nodes)
 }
 
 #[cfg(test)]
