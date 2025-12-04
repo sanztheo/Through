@@ -194,6 +194,86 @@ function ProjectContent() {
     await Promise.all(startPromises);
   }, [api, projectPath, commands]);
 
+  // Function to restart a single server
+  const restartServer = useCallback(
+    async (serverIndex: number) => {
+      if (!api || !projectPath) return;
+
+      const server = servers[serverIndex];
+      const command = commands[serverIndex];
+
+      if (!command) return;
+
+      console.log(`🔄 Restarting server ${serverIndex}: ${command}`);
+
+      try {
+        // 1. Stop the server if it's running
+        if (server.id && server.status === "running") {
+          console.log(`⏹️ Stopping server ${server.id}...`);
+          await api.stopServer(server.id);
+        }
+
+        // 2. Clear logs and set to restarting state
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === serverIndex
+              ? {
+                  ...s,
+                  id: "",
+                  status: "starting",
+                  logs: [`🔄 Restarting: ${command}...`],
+                  url: undefined,
+                }
+              : s,
+          ),
+        );
+
+        // 3. Small delay to ensure port is released
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
+        // 4. Start the server again
+        const port = 48100 + serverIndex;
+        const result = await api.startServer(
+          projectPath,
+          command,
+          port,
+          serverIndex,
+        );
+
+        // 5. Update ID mapping
+        serverIdMapRef.current.set(result.id, serverIndex);
+        console.log(
+          `🗺️ Re-registered server ID mapping: ${result.id} -> index ${serverIndex}`,
+        );
+
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === serverIndex ? { ...s, id: result.id } : s,
+          ),
+        );
+
+        console.log(`✅ Server ${serverIndex} restarted successfully`);
+      } catch (err) {
+        console.error(`❌ Failed to restart server ${serverIndex}:`, err);
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === serverIndex
+              ? {
+                  ...s,
+                  status: "error",
+                  logs: [
+                    ...s.logs,
+                    `❌ Restart failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+                  ],
+                }
+              : s,
+          ),
+        );
+      }
+    },
+    [api, projectPath, commands, servers],
+  );
+
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
 
@@ -997,15 +1077,42 @@ function ProjectContent() {
                   {servers.map((server, index) =>
                     activeTab === `server-${index}` ? (
                       <div key={index}>
-                        <div className="mb-2 pb-2 border-b border-gray-200">
-                          <div className="text-gray-700 text-xs font-semibold mb-1">
-                            Command: {server.command}
-                          </div>
-                          {server.url && (
-                            <div className="text-blue-600 text-xs">
-                              URL: {server.url}
+                        <div className="mb-2 pb-2 border-b border-gray-200 flex items-start justify-between">
+                          <div>
+                            <div className="text-gray-700 text-xs font-semibold mb-1">
+                              Command: {server.command}
                             </div>
-                          )}
+                            {server.url && (
+                              <div className="text-blue-600 text-xs">
+                                URL: {server.url}
+                              </div>
+                            )}
+                          </div>
+                          <button
+                            onClick={() => restartServer(index)}
+                            disabled={server.status === "starting"}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                              server.status === "starting"
+                                ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                : "bg-orange-100 text-orange-700 hover:bg-orange-200"
+                            }`}
+                            title="Stop and restart this server"
+                          >
+                            <svg
+                              className={`w-3.5 h-3.5 ${server.status === "starting" ? "animate-spin" : ""}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                              />
+                            </svg>
+                            {server.status === "starting" ? "Restarting..." : "Restart"}
+                          </button>
                         </div>
                         {server.logs.map((log, logIndex) => (
                           <div
