@@ -94,30 +94,32 @@ export function ProjectSetupModal({
             <span className="text-sm font-medium text-black/60 font-['Geist']">
               Development commands
             </span>
-            <button
-              onClick={handleAISuggest}
-              disabled={isLoadingAI}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-white font-medium text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-[#4DAFE3]"
-              style={{
-                background: "linear-gradient(135deg, #258BFF 0%, #72B4FF 100%)",
-              }}
-            >
-              <Sparkles className="w-4 h-4" />
-              {isLoadingAI ? "Analyzing..." : "AI Suggest"}
-            </button>
           </div>
 
           {/* Command Inputs */}
-          <div className="space-y-2">
+          <div className="space-y-2 max-h-48 overflow-y-auto">
             {commands.map((cmd, index) => (
               <div key={index} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={cmd}
-                  onChange={(e) => handleCommandChange(index, e.target.value)}
-                  placeholder="npm run dev"
-                  className="flex-1 px-4 py-2.5 border border-[#ECECEC] rounded-lg text-sm font-['Geist'] font-medium placeholder:text-black/20 focus:outline-none focus:border-[#4DAFE3] transition-colors"
-                />
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={cmd}
+                    onChange={(e) => handleCommandChange(index, e.target.value)}
+                    placeholder="npm run dev"
+                    className="w-full px-4 py-2.5 pr-28 border border-[#ECECEC] rounded-lg text-sm text-black font-['Geist'] font-medium placeholder:text-black/20 focus:outline-none focus:border-[#4DAFE3] transition-colors"
+                  />
+                  <button
+                    onClick={handleAISuggest}
+                    disabled={isLoadingAI}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-md text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-[#4DAFE3]"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #258BFF 0%, #72B4FF 100%)",
+                    }}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </button>
+                </div>
                 {commands.length > 1 && (
                   <button
                     onClick={() => handleRemoveCommand(index)}
