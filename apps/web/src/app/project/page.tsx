@@ -5,26 +5,42 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Terminal } from "lucide-react";
 
+interface ServerInstance {
+  id: string;
+  command: string;
+  status: "idle" | "starting" | "running" | "error";
+  logs: string[];
+  url?: string;
+}
+
 function ProjectContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const projectPath = searchParams.get("path");
+  const commandsParam = searchParams.get("commands");
   const { api } = useElectronAPI();
 
-  const [serverStatus, setServerStatus] = useState<
-    "idle" | "starting" | "running" | "error"
-  >("idle");
-  const [serverId, setServerId] = useState<string | null>(null);
-  const [serverUrl, setServerUrl] = useState<string | null>(null);
-  const [serverLogs, setServerLogs] = useState<string[]>([]);
+  const commands = commandsParam ? commandsParam.split(",") : [];
+  const [servers, setServers] = useState<ServerInstance[]>(
+    commands.map((cmd) => ({
+      id: "",
+      command: cmd,
+      status: "idle",
+      logs: [],
+    })),
+  );
   const [devToolsLogs, setDevToolsLogs] = useState<
     Array<{ message: string; type: string; source: string; line: number }>
   >([]);
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [showTerminal, setShowTerminal] = useState(false);
-  const [activeTab, setActiveTab] = useState<"server" | "devtools">("server");
+  const [activeTab, setActiveTab] = useState<string>("devtools");
   const previewContainerRef = useRef<HTMLDivElement>(null);
+
+  // Derived state
+  const firstRunningServer = servers.find((s) => s.status === "running");
+  const anyServerRunning = servers.some((s) => s.status === "running");
 
   useEffect(() => {
     if (!projectPath || typeof window === "undefined") return;
@@ -122,20 +138,27 @@ function ProjectContent() {
   // Navigate BrowserView when both ready and server URL is available
   useEffect(() => {
     const navigateToServer = async () => {
-      if (!browserViewReady || !serverUrl || !api?.navigateBrowserView) return;
+      if (
+        !browserViewReady ||
+        !firstRunningServer?.url ||
+        !api?.navigateBrowserView
+      )
+        return;
 
       try {
-        console.log(`🔗 Navigating embedded preview to ${serverUrl}`);
-        await api.navigateBrowserView(serverUrl);
+        console.log(
+          `🔗 Navigating embedded preview to ${firstRunningServer.url}`,
+        );
+        await api.navigateBrowserView(firstRunningServer.url);
       } catch (error) {
         console.error("Failed to navigate BrowserView:", error);
       }
     };
 
     navigateToServer();
-  }, [browserViewReady, serverUrl, api?.navigateBrowserView]);
+  }, [browserViewReady, firstRunningServer?.url, api?.navigateBrowserView]);
 
-  // Set up server event listeners ONCE when component mounts (to avoid race condition)
+  // Set up server event listeners ONCE when component mounts
   useEffect(() => {
     if (!api) return;
 
@@ -145,9 +168,17 @@ function ProjectContent() {
     if (api.onServerReady) {
       api.onServerReady((server: any) => {
         console.log("📡 Received server:ready event", server);
-        setServerStatus("running");
-        const url = `http://localhost:${server.port}`;
-        setServerUrl(url);
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id === server.id
+              ? {
+                  ...s,
+                  status: "running",
+                  url: `http://localhost:${server.port}`,
+                }
+              : s,
+          ),
+        );
       });
     }
 
@@ -155,9 +186,13 @@ function ProjectContent() {
     if (api.onServerStopped) {
       api.onServerStopped((stoppedId: string) => {
         console.log("📡 Received server:stopped event", stoppedId);
-        setServerStatus("idle");
-        setServerUrl(null);
-        setServerLogs((prev) => [...prev, "Server stopped"]);
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id === stoppedId
+              ? { ...s, status: "idle", logs: [...s.logs, "Server stopped"] }
+              : s,
+          ),
+        );
       });
     }
 
@@ -165,7 +200,11 @@ function ProjectContent() {
     if (api.onServerLog) {
       api.onServerLog((logData: { id: string; log: string; type: string }) => {
         console.log("📋 Received server log:", logData);
-        setServerLogs((prev) => [...prev, logData.log]);
+        setServers((prev) =>
+          prev.map((s) =>
+            s.id === logData.id ? { ...s, logs: [...s.logs, logData.log] } : s,
+          ),
+        );
       });
     }
 
@@ -178,55 +217,54 @@ function ProjectContent() {
     }
   }, [api]);
 
-  // Auto-start server when project info is loaded
+  // Auto-start all servers when component loads
   useEffect(() => {
-    if (projectInfo && api && serverStatus === "idle") {
-      startServer();
+    if (projectPath && api && commands.length > 0) {
+      startAllServers();
     }
-  }, [projectInfo, api]);
+  }, [projectPath, api]);
 
-  const startServer = async () => {
-    if (!api || !projectInfo) return;
+  const startAllServers = async () => {
+    if (!api || !projectPath) return;
 
-    try {
-      setServerStatus("starting");
-      setServerLogs([`Starting ${projectInfo.framework} dev server...`]);
+    for (let i = 0; i < commands.length; i++) {
+      const command = commands[i];
+      const port = 3000 + i;
 
-      const result = await api.startServer(
-        projectInfo.path,
-        projectInfo.startCommand,
-        projectInfo.port,
-      );
+      try {
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === i
+              ? { ...s, status: "starting", logs: [`Starting: ${command}...`] }
+              : s,
+          ),
+        );
 
-      setServerId(result.id);
-      // Event listeners are set up in a separate useEffect to avoid race conditions
-    } catch (err) {
-      setServerStatus("error");
-      setServerLogs((prev) => [
-        ...prev,
-        `Error: ${err instanceof Error ? err.message : "Failed to start server"}`,
-      ]);
+        const result = await api.startServer(projectPath, command, port);
+
+        setServers((prev) =>
+          prev.map((s, idx) => (idx === i ? { ...s, id: result.id } : s)),
+        );
+      } catch (err) {
+        setServers((prev) =>
+          prev.map((s, idx) =>
+            idx === i
+              ? {
+                  ...s,
+                  status: "error",
+                  logs: [
+                    ...s.logs,
+                    `Error: ${err instanceof Error ? err.message : "Failed"}`,
+                  ],
+                }
+              : s,
+          ),
+        );
+      }
     }
   };
 
-  const stopServer = async () => {
-    if (!api || !serverId) return;
-
-    try {
-      await api.stopServer(serverId);
-      setServerStatus("idle");
-      setServerUrl(null);
-      setServerId(null);
-      setServerLogs((prev) => [...prev, "Server stopped"]);
-    } catch (err) {
-      setServerLogs((prev) => [
-        ...prev,
-        `Error stopping server: ${err instanceof Error ? err.message : "Unknown error"}`,
-      ]);
-    }
-  };
-
-  if (!projectPath || !projectInfo) {
+  if (!projectPath) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#1e293b]">
         <div className="text-white">Loading project...</div>
@@ -259,10 +297,10 @@ function ProjectContent() {
           </button>
           <div>
             <h1 className="text-gray-900 font-semibold text-sm">
-              {projectInfo.name}
+              {projectPath.split("/").pop() || "Project"}
             </h1>
             <p className="text-gray-500 text-[10px]">
-              {projectInfo.framework} · Port {projectInfo.port}
+              {servers.length} server{servers.length > 1 ? "s" : ""}
             </p>
           </div>
         </div>
@@ -270,21 +308,21 @@ function ProjectContent() {
           <div className="flex items-center gap-1.5">
             <div
               className={`w-1.5 h-1.5 rounded-full ${
-                serverStatus === "running"
+                anyServerRunning
                   ? "bg-green-500"
-                  : serverStatus === "starting"
+                  : servers.some((s) => s.status === "starting")
                     ? "bg-yellow-500 animate-pulse"
-                    : serverStatus === "error"
+                    : servers.some((s) => s.status === "error")
                       ? "bg-red-500"
                       : "bg-gray-400"
               }`}
             />
             <span className="text-[10px] text-gray-600 font-medium">
-              {serverStatus === "running"
-                ? "Running"
-                : serverStatus === "starting"
+              {anyServerRunning
+                ? `${servers.filter((s) => s.status === "running").length}/${servers.length} Running`
+                : servers.some((s) => s.status === "starting")
                   ? "Starting..."
-                  : serverStatus === "error"
+                  : servers.some((s) => s.status === "error")
                     ? "Error"
                     : "Idle"}
             </span>
@@ -327,7 +365,7 @@ function ProjectContent() {
               </div>
             </div>
           )}
-          {browserViewReady && !serverUrl && (
+          {browserViewReady && !firstRunningServer && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
               <div className="text-center">
                 <svg
@@ -343,7 +381,7 @@ function ProjectContent() {
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                   />
                 </svg>
-                <p className="text-gray-600">Waiting for server...</p>
+                <p className="text-gray-600">Waiting for servers...</p>
               </div>
             </div>
           )}
@@ -380,20 +418,10 @@ function ProjectContent() {
             </div>
 
             {/* Tabs */}
-            <div className="flex border-b border-gray-200 bg-white">
-              <button
-                onClick={() => setActiveTab("server")}
-                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
-                  activeTab === "server"
-                    ? "text-gray-900 border-b-2 border-gray-900 bg-white"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                Server
-              </button>
+            <div className="flex border-b border-gray-200 bg-white overflow-x-auto">
               <button
                 onClick={() => setActiveTab("devtools")}
-                className={`flex-1 px-4 py-2 text-xs font-medium transition-colors ${
+                className={`px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
                   activeTab === "devtools"
                     ? "text-gray-900 border-b-2 border-gray-900 bg-white"
                     : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
@@ -401,27 +429,37 @@ function ProjectContent() {
               >
                 DevTools
               </button>
+              {servers.map((server, index) => (
+                <button
+                  key={index}
+                  onClick={() => setActiveTab(`server-${index}`)}
+                  className={`px-4 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                    activeTab === `server-${index}`
+                      ? "text-gray-900 border-b-2 border-gray-900 bg-white"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <div
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        server.status === "running"
+                          ? "bg-green-500"
+                          : server.status === "starting"
+                            ? "bg-yellow-500"
+                            : server.status === "error"
+                              ? "bg-red-500"
+                              : "bg-gray-400"
+                      }`}
+                    />
+                    Server {index + 1}
+                  </div>
+                </button>
+              ))}
             </div>
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-4 font-mono text-xs bg-white">
-              {activeTab === "server" ? (
-                <>
-                  {serverLogs.map((log, index) => (
-                    <div
-                      key={index}
-                      className="text-gray-800 mb-1 leading-relaxed"
-                    >
-                      {log}
-                    </div>
-                  ))}
-                  {serverLogs.length === 0 && (
-                    <div className="text-gray-400 text-sm">
-                      No server logs yet. Start the server to see output.
-                    </div>
-                  )}
-                </>
-              ) : (
+              {activeTab === "devtools" ? (
                 <>
                   {devToolsLogs.map((log, index) => (
                     <div
@@ -445,6 +483,38 @@ function ProjectContent() {
                       No console logs yet. Open your app in the preview to see
                       console output.
                     </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {servers.map((server, index) =>
+                    activeTab === `server-${index}` ? (
+                      <div key={index}>
+                        <div className="mb-2 pb-2 border-b border-gray-200">
+                          <div className="text-gray-600 text-xs font-semibold mb-1">
+                            Command: {server.command}
+                          </div>
+                          {server.url && (
+                            <div className="text-blue-600 text-xs">
+                              URL: {server.url}
+                            </div>
+                          )}
+                        </div>
+                        {server.logs.map((log, logIndex) => (
+                          <div
+                            key={logIndex}
+                            className="text-gray-800 mb-1 leading-relaxed"
+                          >
+                            {log}
+                          </div>
+                        ))}
+                        {server.logs.length === 0 && (
+                          <div className="text-gray-400 text-sm">
+                            No logs yet for this server.
+                          </div>
+                        )}
+                      </div>
+                    ) : null,
                   )}
                 </>
               )}
