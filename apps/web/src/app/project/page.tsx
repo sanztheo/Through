@@ -38,6 +38,9 @@ function ProjectContent() {
   const [activeTab, setActiveTab] = useState<string>("devtools");
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
+  // Map server IDs to their index for log routing before IDs are assigned
+  const serverIdMapRef = useRef<Map<string, number>>(new Map());
+
   // Derived state
   const firstRunningServer = servers.find((s) => s.status === "running");
   const anyServerRunning = servers.some((s) => s.status === "running");
@@ -200,10 +203,21 @@ function ProjectContent() {
     if (api.onServerLog) {
       api.onServerLog((logData: { id: string; log: string; type: string }) => {
         console.log("📋 Received server log:", logData);
+
+        // Find server by ID (either direct match or via ID map)
+        const serverIndex = serverIdMapRef.current.get(logData.id);
+
         setServers((prev) =>
-          prev.map((s) =>
-            s.id === logData.id ? { ...s, logs: [...s.logs, logData.log] } : s,
-          ),
+          prev.map((s, idx) => {
+            // Match by ID or by index from map
+            if (
+              s.id === logData.id ||
+              (serverIndex !== undefined && idx === serverIndex)
+            ) {
+              return { ...s, logs: [...s.logs, logData.log] };
+            }
+            return s;
+          }),
         );
       });
     }
@@ -241,6 +255,12 @@ function ProjectContent() {
         );
 
         const result = await api.startServer(projectPath, command, port);
+
+        // Register ID -> index mapping IMMEDIATELY for log routing
+        serverIdMapRef.current.set(result.id, i);
+        console.log(
+          `🗺️ Registered server ID mapping: ${result.id} -> index ${i}`,
+        );
 
         setServers((prev) =>
           prev.map((s, idx) => (idx === i ? { ...s, id: result.id } : s)),

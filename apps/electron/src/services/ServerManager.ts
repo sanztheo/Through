@@ -19,17 +19,17 @@ export class ServerManager extends EventEmitter {
   ): Promise<ServerInstance> {
     const id = this.generateServerId();
 
-    // Check if requested port is available, find alternative if not
+    // Check if requested port is already in use, find alternative if needed
     const requestedPort = port;
-    const portAvailable = isPortAvailable(requestedPort);
+    const portInUse = isPortListening(requestedPort);
 
-    const actualPort = portAvailable
+    const actualPort = !portInUse
       ? requestedPort
       : findAvailablePort(requestedPort, requestedPort + 100);
 
     if (actualPort !== requestedPort) {
       console.log(
-        `Port ${requestedPort} is occupied, using port ${actualPort} instead`,
+        `⚠️ Port ${requestedPort} is already in use, using port ${actualPort} instead`,
       );
     }
 
