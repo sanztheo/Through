@@ -9,6 +9,7 @@ interface BrowserTab {
 
 let browserTabs: Map<string, BrowserTab> = new Map();
 let activeTabId: string | null = null;
+let lastBounds: { x: number; y: number; width: number; height: number } | null = null;
 
 function generateTabId(): string {
   return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -29,15 +30,19 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
         const tabId = generateTabId();
         console.log(`🌐 Creating new tab ${tabId} with bounds:`, bounds);
 
-        // Create new BrowserView
+        // Create new BrowserView with unique partition for session isolation
+        // Each tab has its own cookies, localStorage, etc.
         const view = new BrowserView({
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
             devTools: true,
+            partition: `persist:tab_${tabId}`, // Unique session per tab
           },
         });
+
+        console.log(`🔒 Created isolated session: persist:tab_${tabId}`);
 
         // Listen for title updates
         view.webContents.on("page-title-updated", (event, title) => {
@@ -113,8 +118,22 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
 
         browserTabs.set(tabId, tab);
 
-        // If this is the first tab or no active tab, make it active
+        // Store bounds for later use (e.g., when switching tabs)
+        lastBounds = bounds;
+
+        // If this is the first tab, make it active
+        // Otherwise, switch to the new tab
         if (!activeTabId || browserTabs.size === 1) {
+          mainWindow.addBrowserView(view);
+          view.setBounds(bounds);
+          view.setAutoResize({ width: true, height: true });
+          activeTabId = tabId;
+        } else {
+          // Switch to new tab - remove current active, add new one
+          const currentTab = browserTabs.get(activeTabId);
+          if (currentTab) {
+            mainWindow.removeBrowserView(currentTab.view);
+          }
           mainWindow.addBrowserView(view);
           view.setBounds(bounds);
           view.setAutoResize({ width: true, height: true });
@@ -141,40 +160,48 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
   );
 
   // Switch to a different tab
-  ipcMain.handle("browserview:switch-tab", async (event, tabId: string) => {
-    try {
-      const tab = browserTabs.get(tabId);
-      if (!tab) {
-        throw new Error(`Tab ${tabId} not found`);
-      }
-
-      // Remove current active tab view
-      if (activeTabId) {
-        const currentTab = browserTabs.get(activeTabId);
-        if (currentTab) {
-          mainWindow.removeBrowserView(currentTab.view);
+  ipcMain.handle(
+    "browserview:switch-tab",
+    async (
+      event,
+      tabId: string,
+      bounds?: { x: number; y: number; width: number; height: number },
+    ) => {
+      try {
+        const tab = browserTabs.get(tabId);
+        if (!tab) {
+          throw new Error(`Tab ${tabId} not found`);
         }
+
+        // Remove current active tab view
+        if (activeTabId) {
+          const currentTab = browserTabs.get(activeTabId);
+          if (currentTab) {
+            mainWindow.removeBrowserView(currentTab.view);
+          }
+        }
+
+        // Add the new tab view
+        mainWindow.addBrowserView(tab.view);
+
+        // Use provided bounds, or fallback to stored lastBounds
+        const finalBounds = bounds || lastBounds;
+        if (finalBounds) {
+          tab.view.setBounds(finalBounds);
+          lastBounds = finalBounds; // Update stored bounds
+        }
+        tab.view.setAutoResize({ width: true, height: true });
+
+        activeTabId = tabId;
+        console.log(`🔀 Switched to tab ${tabId}`);
+
+        return { success: true };
+      } catch (error: any) {
+        console.error("❌ Failed to switch tab:", error);
+        throw new Error(`Failed to switch tab: ${error.message}`);
       }
-
-      // Add the new tab view
-      mainWindow.addBrowserView(tab.view);
-
-      // Get the bounds from renderer
-      const bounds = await mainWindow.webContents.executeJavaScript(
-        `window.electronAPI.getBrowserViewBounds()`,
-      );
-      tab.view.setBounds(bounds);
-      tab.view.setAutoResize({ width: true, height: true });
-
-      activeTabId = tabId;
-      console.log(`🔀 Switched to tab ${tabId}`);
-
-      return { success: true };
-    } catch (error: any) {
-      console.error("❌ Failed to switch tab:", error);
-      throw new Error(`Failed to switch tab: ${error.message}`);
-    }
-  });
+    },
+  );
 
   // Close a tab
   ipcMain.handle("browserview:close-tab", async (event, tabId: string) => {
@@ -263,6 +290,9 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
       bounds: { x: number; y: number; width: number; height: number },
     ) => {
       try {
+        // Store bounds for use when switching tabs
+        lastBounds = bounds;
+
         if (!activeTabId) {
           return { success: true }; // No active tab, nothing to update
         }
@@ -458,6 +488,7 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
             contextIsolation: true,
             sandbox: true,
             devTools: true,
+            partition: `persist:tab_${tabId}`, // Unique session per tab
           },
         });
 

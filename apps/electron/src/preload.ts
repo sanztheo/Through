@@ -69,8 +69,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     height: number;
     url?: string;
   }) => ipcRenderer.invoke("browserview:create-tab", bounds, bounds.url),
-  switchTab: (tabId: string) =>
-    ipcRenderer.invoke("browserview:switch-tab", tabId),
+  switchTab: (
+    tabId: string,
+    bounds?: { x: number; y: number; width: number; height: number },
+  ) => ipcRenderer.invoke("browserview:switch-tab", tabId, bounds),
   closeTab: (tabId: string) =>
     ipcRenderer.invoke("browserview:close-tab", tabId),
   getTabs: () => ipcRenderer.invoke("browserview:get-tabs"),

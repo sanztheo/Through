@@ -65,7 +65,10 @@ export interface ElectronAPI {
     title: string;
     url: string;
   }>;
-  switchTab: (tabId: string) => Promise<{ success: boolean }>;
+  switchTab: (
+    tabId: string,
+    bounds?: { x: number; y: number; width: number; height: number },
+  ) => Promise<{ success: boolean }>;
   closeTab: (tabId: string) => Promise<{ success: boolean }>;
   getTabs: () => Promise<{
     success: boolean;

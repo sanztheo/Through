@@ -570,9 +570,30 @@ function ProjectContent() {
                       : "bg-white hover:bg-gray-50 text-gray-600"
                   }`}
                   onClick={async () => {
-                    if (api?.switchTab && tab.id !== activeBrowserTabId) {
-                      await api.switchTab(tab.id);
+                    if (
+                      api?.switchTab &&
+                      tab.id !== activeBrowserTabId &&
+                      previewContainerRef.current
+                    ) {
+                      const container = previewContainerRef.current;
+                      const rect = container.getBoundingClientRect();
+                      const xOffset = showTerminal ? 384 : 0;
+                      const widthReduction = showTerminal ? 384 : 0;
+
+                      await api.switchTab(tab.id, {
+                        x: Math.round(rect.left + xOffset),
+                        y: Math.round(rect.top),
+                        width: Math.round(rect.width - widthReduction),
+                        height: Math.round(rect.height),
+                      });
                       setActiveBrowserTabId(tab.id);
+                      // Update isActive state for all tabs
+                      setBrowserTabs((prev) =>
+                        prev.map((t) => ({
+                          ...t,
+                          isActive: t.id === tab.id,
+                        })),
+                      );
                     }
                   }}
                 >
@@ -582,7 +603,11 @@ function ProjectContent() {
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
-                      if (api?.closeTab && browserTabs.length > 1) {
+                      if (
+                        api?.closeTab &&
+                        browserTabs.length > 1 &&
+                        previewContainerRef.current
+                      ) {
                         await api.closeTab(tab.id);
                         setBrowserTabs((prev) =>
                           prev.filter((t) => t.id !== tab.id),
@@ -593,7 +618,17 @@ function ProjectContent() {
                             (t) => t.id !== tab.id,
                           );
                           if (remaining.length > 0) {
-                            await api.switchTab(remaining[0].id);
+                            const container = previewContainerRef.current;
+                            const rect = container.getBoundingClientRect();
+                            const xOffset = showTerminal ? 384 : 0;
+                            const widthReduction = showTerminal ? 384 : 0;
+
+                            await api.switchTab(remaining[0].id, {
+                              x: Math.round(rect.left + xOffset),
+                              y: Math.round(rect.top),
+                              width: Math.round(rect.width - widthReduction),
+                              height: Math.round(rect.height),
+                            });
                             setActiveBrowserTabId(remaining[0].id);
                           }
                         }
@@ -630,20 +665,27 @@ function ProjectContent() {
                   const widthReduction = showTerminal ? 384 : 0;
 
                   try {
+                    // Pass the current server URL to the new tab
+                    const serverUrl = firstRunningServer?.url;
                     const result = await api.createTab({
                       x: Math.round(rect.left + xOffset),
                       y: Math.round(rect.top),
                       width: Math.round(rect.width - widthReduction),
                       height: Math.round(rect.height),
+                      url: serverUrl,
                     });
 
                     if (result.success) {
+                      // Update all tabs to mark them as inactive
+                      setBrowserTabs((prev) =>
+                        prev.map((t) => ({ ...t, isActive: false })),
+                      );
                       setBrowserTabs((prev) => [
                         ...prev,
                         {
                           id: result.tabId,
-                          title: result.title,
-                          url: result.url,
+                          title: result.title || serverUrl || "New Tab",
+                          url: result.url || serverUrl || "",
                           isActive: true,
                         },
                       ]);
