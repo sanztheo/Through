@@ -95,15 +95,17 @@ pub fn spawn_dev_server(
 /// * `project_path` - Working directory for the process
 /// * `command` - Command to execute (e.g., "npm", "cargo", "python")
 /// * `args` - Array of command arguments
+/// * `port` - Port number to set via PORT environment variable
 /// * `on_log` - Callback function for streaming logs
 ///
 /// # Returns
 /// * `Result<ProcessHandle>` - Handle to the spawned process including PID
-#[napi(ts_args_type = "projectPath: string, command: string, args: Array<string>, onLog: (log: string, isError: boolean) => void")]
+#[napi(ts_args_type = "projectPath: string, command: string, args: Array<string>, port: number, onLog: (log: string, isError: boolean) => void")]
 pub fn spawn_dev_server_with_logs(
     project_path: String,
     command: String,
     args: Vec<String>,
+    port: u32,
     on_log: JsFunction,
 ) -> Result<ProcessHandle> {
     // Validate project path exists
@@ -132,7 +134,8 @@ pub fn spawn_dev_server_with_logs(
         })?;
 
     // Spawn the process with proper I/O handling and unbuffered output
-    let mut child = Command::new(&command)
+    let mut cmd_builder = Command::new(&command);
+    cmd_builder
         .args(&args)
         .current_dir(&project_path)
         .stdout(Stdio::piped())
@@ -143,7 +146,15 @@ pub fn spawn_dev_server_with_logs(
         .env("NODE_ENV", "development")
         .env("PYTHONUNBUFFERED", "1")
         .env("RUST_BACKTRACE", "1")
-        .env("CI", "false")
+        .env("CI", "false");
+
+    // Only set PORT environment variable if port > 0
+    // If port is 0, let the project use its native port configuration
+    if port > 0 {
+        cmd_builder.env("PORT", port.to_string());
+    }
+
+    let mut child = cmd_builder
         .spawn()
         .map_err(|e| {
             Error::new(

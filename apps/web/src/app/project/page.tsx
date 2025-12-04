@@ -118,7 +118,7 @@ function ProjectContent() {
     const startPromises = commands.map(async (command, i) => {
       console.log(`[startAllServers] Starting server ${i}: ${command}`);
 
-      const port = 3000 + i;
+      const port = 48100 + i;
 
       try {
         setServers((prev) =>

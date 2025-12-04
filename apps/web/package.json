@@ -4,7 +4,7 @@
   "description": "Next.js frontend for Through app",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3001",
+    "dev": "next dev -p 49123",
     "build": "next build",
     "start": "next start",
     "clean": "rm -rf .next out",

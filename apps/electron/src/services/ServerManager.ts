@@ -27,21 +27,7 @@ export class ServerManager extends EventEmitter {
       console.log(`📋 Storing server index mapping: ${id} -> ${clientIndex}`);
     }
 
-    // Check if requested port is already in use, find alternative if needed
-    const requestedPort = port;
-    const portInUse = isPortListening(requestedPort);
-
-    const actualPort = !portInUse
-      ? requestedPort
-      : findAvailablePort(requestedPort, requestedPort + 100);
-
-    if (actualPort !== requestedPort) {
-      console.log(
-        `⚠️ Port ${requestedPort} is already in use, using port ${actualPort} instead`,
-      );
-    }
-
-    console.log(`Starting server: ${command} on port ${actualPort}`);
+    console.log(`Starting server: ${command} (will detect port automatically)`);
 
     // Parse command: handle "cd folder && npm run dev" format
     let workingDir = projectPath;
@@ -60,28 +46,33 @@ export class ServerManager extends EventEmitter {
     // Parse actual command into executable and args
     const [cmd, ...args] = actualCommand.split(" ");
 
-    // Add port argument to the command
-    // For npm/yarn: add -- --port <actualPort> or -- -p <actualPort>
-    if (cmd === "npm" || cmd === "yarn" || cmd === "pnpm") {
-      args.push("--");
-      // Detect framework to use correct port flag
-      if (actualCommand.includes("vite") || actualCommand.includes("dev")) {
-        args.push("--port", actualPort.toString());
-      } else {
-        args.push("-p", actualPort.toString());
-      }
-    }
+    // Don't force any port - let the project use its native configuration
 
     try {
-      // Spawn using Rust NAPI with live log streaming
+      // Spawn using Rust NAPI with live log streaming (pass 0 to skip PORT env var)
       const handle = spawnDevServerWithLogs(
         workingDir, // Use the parsed working directory
         cmd,
         args,
+        0, // Pass 0 to indicate we don't want to set PORT env var
         (log: string, isError: boolean) => {
           // Emit log events to IPC with client index
           if (log.trim()) {
             console.log(`[Server ${id}] ${log}`);
+
+            // Try to detect port from common log patterns
+            const detectedPort = this.detectPortFromLog(log);
+            if (detectedPort) {
+              console.log(
+                `🔍 Detected port ${detectedPort} from logs for server ${id}`,
+              );
+              const server = this.servers.get(id);
+              if (server && !server.port) {
+                server.port = detectedPort;
+                this.servers.set(id, server);
+              }
+            }
+
             const clientIndex = this.serverIndices.get(id);
             this.emit("server:log", {
               id,
@@ -98,7 +89,7 @@ export class ServerManager extends EventEmitter {
         projectPath,
         command,
         pid: handle.pid,
-        port: actualPort,
+        port: 0, // Will be detected from logs
         status: "starting",
         startedAt: new Date(),
       };
@@ -106,12 +97,14 @@ export class ServerManager extends EventEmitter {
       this.servers.set(id, instance);
       console.log(`Server started with PID ${handle.pid}`);
 
-      // Wait for server to be ready (port becomes occupied)
-      await this.waitForServerReady(actualPort);
+      // Wait for server to be ready by detecting port from logs
+      const detectedPort = await this.waitForPortDetection(id);
 
+      instance.port = detectedPort;
       instance.status = "running";
+      this.servers.set(id, instance);
       this.emit("server:ready", instance);
-      console.log(`Server ready on port ${actualPort}`);
+      console.log(`Server ready on port ${detectedPort}`);
 
       return instance;
     } catch (error: any) {
@@ -137,24 +130,46 @@ export class ServerManager extends EventEmitter {
     console.log(`Server ${id} stopped`);
   }
 
-  private async waitForServerReady(
-    port: number,
+  private async waitForPortDetection(
+    serverId: string,
     timeout = 30000,
-  ): Promise<void> {
+  ): Promise<number> {
     const startTime = Date.now();
 
     while (Date.now() - startTime < timeout) {
-      // Check if server is actively listening on the port
-      const listening = isPortListening(port);
-      if (listening) {
-        // Server is ready and accepting connections
-        return;
+      const server = this.servers.get(serverId);
+      if (server && server.port && server.port > 0) {
+        // Port detected from logs
+        return server.port;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
 
-    throw new Error("Server failed to start within timeout");
+    throw new Error("Failed to detect server port within timeout");
+  }
+
+  private detectPortFromLog(log: string): number | null {
+    // Common patterns for port detection in server logs
+    const patterns = [
+      /(?:Local|local):\s*https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):(\d+)/i, // Vite, Next.js: Local: http://localhost:5173
+      /(?:listening|running|started).*?(?:port|:)\s*(\d+)/i, // Express: listening on port 3001
+      /server.*?(?:port|:)\s*(\d+)/i, // Generic: server on port 3000
+      /:(\d+)\//i, // URL pattern: http://localhost:3000/
+      /Port:\s*(\d+)/i, // Port: 3001
+    ];
+
+    for (const pattern of patterns) {
+      const match = log.match(pattern);
+      if (match && match[1]) {
+        const port = parseInt(match[1], 10);
+        if (port > 0 && port < 65536) {
+          return port;
+        }
+      }
+    }
+
+    return null;
   }
 
   private generateServerId(): string {

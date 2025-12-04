@@ -35,7 +35,7 @@ async function createMainWindow() {
   // Development vs Production URL loading
   const isDev = process.env.NODE_ENV === "development";
   const startUrl = isDev
-    ? "http://localhost:3001"
+    ? "http://localhost:49123"
     : `file://${path.join(__dirname, "../../web/out/index.html")}`;
 
   console.log(`Loading URL: ${startUrl}`);

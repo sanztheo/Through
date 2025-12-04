@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Stack**:
 - **Electron 28** - Main process (Node.js backend)
-- **Next.js 14** - Renderer UI (port 3001) running in Vite
+- **Next.js 14** - Renderer UI (port 49123) running in Vite
 - **Rust NAPI** - Native modules for performance-critical operations
 - **OpenAI GPT-4-mini** - Intelligent project detection via API
 
@@ -22,8 +22,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm run typecheck
 
 # Individual workspace development
-npm run dev:web          # Next.js only (port 3001)
-npm run dev:electron     # Electron only (loads from :3001)
+npm run dev:web          # Next.js only (port 49123)
+npm run dev:electron     # Electron only (loads from :49123)
 
 # Building
 npm run build:native     # Rust NAPI (required first time)
@@ -184,7 +184,7 @@ npm run typecheck  # Checks electron + web workspaces
 ### Common Issues
 - **"Module @through/native not found"**: Run `npm run build:native`
 - **"OPENAI_API_KEY environment variable is required"**: Check `.env` exists
-- **Port 3001 conflict**: Kill existing Next.js: `lsof -ti:3001 | xargs kill`
+- **Port 49123 conflict**: Kill existing Next.js: `lsof -ti:49123 | xargs kill`
 - **ESLint errors**: Ignore (no ESLint config present, faux positifs)
 
 ## Code Style Notes
