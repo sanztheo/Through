@@ -16,6 +16,10 @@ export interface ElectronAPI {
   invalidateCache: (path: string) => Promise<{ success: boolean }>;
   listProjectFiles: (path: string) => Promise<FileNode[]>;
   suggestCommands: (path: string) => Promise<string[]>;
+  validateCommand: (
+    path: string,
+    command: string,
+  ) => Promise<{ valid: boolean; corrected: string; issues: string[] }>;
 
   // Server operations
   startServer: (

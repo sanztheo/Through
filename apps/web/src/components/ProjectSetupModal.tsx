@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { X, Sparkles, Plus } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Sparkles, Plus, AlertCircle, CheckCircle } from "lucide-react";
 import { FileExplorer } from "./FileExplorer";
 
 interface ProjectSetupModalProps {
@@ -9,6 +9,12 @@ interface ProjectSetupModalProps {
   projectName: string;
   onClose: () => void;
   onSubmit: (commands: string[]) => void;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  corrected: string;
+  issues: string[];
 }
 
 export function ProjectSetupModal({
@@ -19,15 +25,53 @@ export function ProjectSetupModal({
 }: ProjectSetupModalProps) {
   const [commands, setCommands] = useState<string[]>([""]);
   const [isLoadingAI, setIsLoadingAI] = useState(false);
+  const [validationResults, setValidationResults] = useState<
+    Map<number, ValidationResult>
+  >(new Map());
+  const validationTimeoutRef = useRef<Map<number, NodeJS.Timeout>>(new Map());
 
   const handleAddCommand = () => {
     setCommands([...commands, ""]);
   };
 
-  const handleCommandChange = (index: number, value: string) => {
+  const handleCommandChange = async (index: number, value: string) => {
     const updated = [...commands];
     updated[index] = value;
     setCommands(updated);
+
+    // Validate command after user types
+    if (value.trim() && typeof window !== "undefined" && window.electronAPI) {
+      try {
+        const result = await window.electronAPI.validateCommand(
+          projectPath,
+          value,
+        );
+        console.log(`[Modal] Validation result for "${value}":`, result);
+
+        // Auto-apply correction if command has issues
+        if (!result.valid && result.corrected !== value) {
+          console.log(`[Modal] Auto-correcting to: "${result.corrected}"`);
+          updated[index] = result.corrected;
+          setCommands(updated);
+        }
+
+        // Store validation result
+        setValidationResults((prev) => {
+          const newMap = new Map(prev);
+          newMap.set(index, result);
+          return newMap;
+        });
+      } catch (error) {
+        console.error("[Modal] Validation error:", error);
+      }
+    } else {
+      // Clear validation for empty commands
+      setValidationResults((prev) => {
+        const newMap = new Map(prev);
+        newMap.delete(index);
+        return newMap;
+      });
+    }
   };
 
   const handleRemoveCommand = (index: number) => {
@@ -98,38 +142,81 @@ export function ProjectSetupModal({
 
           {/* Command Inputs */}
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {commands.map((cmd, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    value={cmd}
-                    onChange={(e) => handleCommandChange(index, e.target.value)}
-                    placeholder="npm run dev"
-                    className="w-full px-4 py-2.5 pr-28 border border-[#ECECEC] rounded-lg text-sm text-black font-['Geist'] font-medium placeholder:text-black/20 focus:outline-none focus:border-[#4DAFE3] transition-colors"
-                  />
-                  <button
-                    onClick={handleAISuggest}
-                    disabled={isLoadingAI}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-md text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-[#4DAFE3]"
-                    style={{
-                      background:
-                        "linear-gradient(135deg, #258BFF 0%, #72B4FF 100%)",
-                    }}
-                  >
-                    <Sparkles className="w-4 h-4" />
-                  </button>
+            {commands.map((cmd, index) => {
+              const validation = validationResults.get(index);
+              const hasIssues =
+                validation &&
+                (!validation.valid || validation.issues.length > 0);
+              const isValid = validation && validation.valid;
+
+              return (
+                <div key={index} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={cmd}
+                        onChange={(e) =>
+                          handleCommandChange(index, e.target.value)
+                        }
+                        placeholder="npm run dev"
+                        className={`w-full px-4 py-2.5 pr-28 border rounded-lg text-sm text-black font-['Geist'] font-medium placeholder:text-black/20 focus:outline-none transition-colors ${
+                          hasIssues
+                            ? "border-orange-400 focus:border-orange-500"
+                            : isValid
+                              ? "border-green-400 focus:border-green-500"
+                              : "border-[#ECECEC] focus:border-[#4DAFE3]"
+                        }`}
+                      />
+                      <button
+                        onClick={handleAISuggest}
+                        disabled={isLoadingAI}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center w-8 h-8 rounded-md text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-[#4DAFE3]"
+                        style={{
+                          background:
+                            "linear-gradient(135deg, #258BFF 0%, #72B4FF 100%)",
+                        }}
+                      >
+                        <Sparkles className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {commands.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveCommand(index)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-500 transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Validation Feedback */}
+                  {validation && validation.issues.length > 0 && (
+                    <div className="flex items-start gap-2 px-2">
+                      {validation.valid ? (
+                        <CheckCircle className="w-4 h-4 text-green-500 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div className="flex-1">
+                        {validation.issues.map((issue, i) => (
+                          <p
+                            key={i}
+                            className={`text-xs font-['Geist'] ${
+                              validation.valid
+                                ? "text-green-600"
+                                : "text-orange-600"
+                            }`}
+                          >
+                            {issue}
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                {commands.length > 1 && (
-                  <button
-                    onClick={() => handleRemoveCommand(index)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-red-500 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Add Command Button */}

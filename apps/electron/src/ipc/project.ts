@@ -58,7 +58,7 @@ export function registerProjectHandlers() {
     }
   });
 
-  // New handler: Suggest commands using LangGraph.js agent
+  // New handler: Suggest commands using AI
   ipcMain.handle(
     "project:suggest-commands",
     async (event, projectPath: string) => {
@@ -68,6 +68,24 @@ export function registerProjectHandlers() {
         return commands;
       } catch (error) {
         console.error("Error suggesting commands:", error);
+        throw error;
+      }
+    },
+  );
+
+  // New handler: Validate and fix a command
+  ipcMain.handle(
+    "project:validate-command",
+    async (event, projectPath: string, command: string) => {
+      console.log(`IPC: Validating command "${command}" for ${projectPath}`);
+      try {
+        const result = await commandSuggester.validateAndFixCommand(
+          projectPath,
+          command,
+        );
+        return result;
+      } catch (error) {
+        console.error("Error validating command:", error);
         throw error;
       }
     },

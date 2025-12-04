@@ -1,15 +1,19 @@
 import { analyzeProjectFiles } from "@through/native";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 import OpenAI from "openai";
 
 export class CommandSuggester {
   private openai: OpenAI;
+  private platform: string;
 
   constructor() {
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
+    this.platform = os.platform(); // 'darwin' (Mac), 'win32' (Windows), 'linux'
+    console.log(`[CommandSuggester] Detected OS: ${this.platform}`);
   }
 
   private async analyzeProject(projectPath: string) {
@@ -135,6 +139,102 @@ Return JSON format:
     if (scripts.dev) return ["npm run dev"];
     if (scripts.start) return ["npm start"];
     if (scripts["dev:web"]) return ["npm run dev:web"];
-    return ["npm run dev"];
+    return []; // Ne rien suggérer si vraiment aucun script
+  }
+
+  /**
+   * Valide et corrige une commande saisie par l'utilisateur
+   */
+  async validateAndFixCommand(
+    projectPath: string,
+    command: string,
+  ): Promise<{ valid: boolean; corrected: string; issues: string[] }> {
+    const issues: string[] = [];
+    let corrected = command.trim();
+
+    console.log(`[CommandSuggester] Validating command: "${command}"`);
+
+    // 1. Parse la commande pour détecter les cd
+    const cdMatch = command.match(/cd\s+([^\s&|;]+)/);
+    let targetPath = projectPath;
+    let actualCommand = command;
+
+    if (cdMatch) {
+      const subDir = cdMatch[1];
+      targetPath = path.join(projectPath, subDir);
+      console.log(`[CommandSuggester] Detected cd to: ${subDir}`);
+
+      // Vérifier que le dossier existe
+      if (!fs.existsSync(targetPath)) {
+        issues.push(`Folder "${subDir}" does not exist`);
+        return { valid: false, corrected: command, issues };
+      }
+
+      // Extraire la commande après le cd
+      const parts = command.split(/&&|&/);
+      actualCommand = parts[1]?.trim() || "";
+    }
+
+    // 2. Vérifier le format selon l'OS
+    if (cdMatch) {
+      const isWindows = this.platform === "win32";
+      const hasSingleAmpersand =
+        command.includes(" & ") && !command.includes(" && ");
+      const hasDoubleAmpersand = command.includes(" && ");
+
+      if (isWindows && hasDoubleAmpersand) {
+        // Windows préfère un seul &
+        corrected = corrected.replace(" && ", " & ");
+        issues.push("Fixed: Windows uses single & instead of &&");
+      } else if (!isWindows && hasSingleAmpersand) {
+        // Mac/Linux nécessite &&
+        corrected = corrected.replace(" & ", " && ");
+        issues.push("Fixed: Mac/Linux requires && instead of single &");
+      }
+    }
+
+    // 3. Vérifier que la commande existe dans package.json
+    const packageJsonPath = path.join(targetPath, "package.json");
+    if (fs.existsSync(packageJsonPath)) {
+      try {
+        const packageJson = JSON.parse(
+          fs.readFileSync(packageJsonPath, "utf-8"),
+        );
+        const scripts = packageJson.scripts || {};
+
+        // Extraire le script name (ex: "npm run dev" -> "dev")
+        const npmRunMatch = actualCommand.match(/npm\s+run\s+(\S+)/);
+        if (npmRunMatch) {
+          const scriptName = npmRunMatch[1];
+          if (!scripts[scriptName]) {
+            issues.push(`Script "${scriptName}" not found in package.json`);
+
+            // Suggérer le bon script
+            if (scripts.dev) {
+              actualCommand = actualCommand.replace(
+                /npm\s+run\s+\S+/,
+                "npm run dev",
+              );
+              corrected = cdMatch
+                ? `cd ${cdMatch[1]} ${this.platform === "win32" ? "&" : "&&"} ${actualCommand}`
+                : actualCommand;
+              issues.push('Suggested: "npm run dev" instead');
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error reading package.json:", error);
+      }
+    } else {
+      issues.push("No package.json found in target directory");
+    }
+
+    const valid =
+      issues.length === 0 || issues.every((i) => i.startsWith("Fixed:"));
+    console.log(`[CommandSuggester] Validation result: ${valid ? "✅" : "❌"}`);
+    console.log(`[CommandSuggester] Issues:`, issues);
+    console.log(`[CommandSuggester] Corrected: "${corrected}"`);
+
+    return { valid, corrected, issues };
   }
 }
