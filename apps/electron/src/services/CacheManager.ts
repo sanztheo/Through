@@ -48,16 +48,45 @@ export class CacheManager {
     }
   }
 
-  async set(projectPath: string, analysis: ProjectAnalysis): Promise<void> {
+  async set(
+    projectPath: string,
+    analysis: ProjectAnalysis,
+    commands?: string[],
+  ): Promise<void> {
     const cachePath = this.getCachePath(projectPath);
     const entry: CacheEntry = {
       analysis,
       cachedAt: new Date().toISOString(),
       projectHash: this.hashProjectPath(projectPath),
+      commands,
     };
 
     await fs.writeFile(cachePath, JSON.stringify(entry, null, 2), "utf-8");
     console.log(`Cached analysis for ${projectPath}`);
+  }
+
+  async updateCommands(projectPath: string, commands: string[]): Promise<void> {
+    const cachePath = this.getCachePath(projectPath);
+
+    try {
+      const existing = await this.get(projectPath);
+      if (existing) {
+        existing.commands = commands;
+        await fs.writeFile(
+          cachePath,
+          JSON.stringify(existing, null, 2),
+          "utf-8",
+        );
+        console.log(`Updated commands for ${projectPath}`);
+      } else {
+        console.warn(
+          `No cache entry found for ${projectPath}, cannot update commands`,
+        );
+      }
+    } catch (error) {
+      console.error("Error updating commands:", error);
+      throw error;
+    }
   }
 
   isValid(entry: CacheEntry, maxAgeHours: number = 24): boolean {

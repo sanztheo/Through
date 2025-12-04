@@ -5,6 +5,60 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { Terminal } from "lucide-react";
 
+// Parse ANSI color codes and emojis to styled HTML
+function parseLogLine(text: string): React.ReactNode[] {
+  const ansiRegex = /\u001b\[(\d+)m/g;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let currentColor = "";
+
+  const colorMap: Record<string, string> = {
+    "30": "text-gray-900",
+    "31": "text-red-500",
+    "32": "text-green-500",
+    "33": "text-yellow-500",
+    "34": "text-blue-500",
+    "35": "text-purple-500",
+    "36": "text-cyan-500",
+    "37": "text-gray-300",
+    "90": "text-gray-500",
+    "91": "text-red-400",
+    "92": "text-green-400",
+    "93": "text-yellow-400",
+    "94": "text-blue-400",
+    "95": "text-purple-400",
+    "96": "text-cyan-400",
+    "97": "text-white",
+    "0": "", // reset
+  };
+
+  let match;
+  while ((match = ansiRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const textPart = text.slice(lastIndex, match.index);
+      parts.push(
+        <span key={lastIndex} className={currentColor}>
+          {textPart}
+        </span>,
+      );
+    }
+
+    const code = match[1];
+    currentColor = colorMap[code] || "";
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(
+      <span key={lastIndex} className={currentColor}>
+        {text.slice(lastIndex)}
+      </span>,
+    );
+  }
+
+  return parts.length > 0 ? parts : [text];
+}
+
 interface ServerInstance {
   id: string;
   command: string;
@@ -550,9 +604,9 @@ function ProjectContent() {
                         {server.logs.map((log, logIndex) => (
                           <div
                             key={logIndex}
-                            className="text-gray-800 mb-1 leading-relaxed"
+                            className="mb-1 leading-relaxed font-mono text-sm"
                           >
-                            {log}
+                            {parseLogLine(log)}
                           </div>
                         ))}
                         {server.logs.length === 0 && (

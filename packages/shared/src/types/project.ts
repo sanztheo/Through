@@ -33,4 +33,5 @@ export interface CacheEntry {
   analysis: ProjectAnalysis;
   cachedAt: string;
   projectHash: string;
+  commands?: string[]; // User-submitted commands
 }
