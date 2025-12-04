@@ -51,7 +51,35 @@ export interface ElectronAPI {
     }) => void,
   ) => void;
 
-  // BrowserView operations for embedded preview
+  // BrowserView tab operations
+  createTab: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    url?: string;
+  }) => Promise<{
+    success: boolean;
+    tabId: string;
+    title: string;
+    url: string;
+  }>;
+  switchTab: (tabId: string) => Promise<{ success: boolean }>;
+  closeTab: (tabId: string) => Promise<{ success: boolean }>;
+  getTabs: () => Promise<{
+    success: boolean;
+    tabs: Array<{
+      id: string;
+      title: string;
+      url: string;
+      isActive: boolean;
+    }>;
+  }>;
+  onTabUpdated: (
+    callback: (data: { id: string; title: string; url: string }) => void,
+  ) => void;
+
+  // Legacy BrowserView operations (backward compatibility)
   createBrowserView: (bounds: {
     x: number;
     y: number;

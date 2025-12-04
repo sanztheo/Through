@@ -60,7 +60,26 @@ contextBridge.exposeInMainWorld("electronAPI", {
     });
   },
 
-  // BrowserView operations for embedded preview
+  // BrowserView tab operations
+  createTab: (bounds: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    url?: string;
+  }) => ipcRenderer.invoke("browserview:create-tab", bounds, bounds.url),
+  switchTab: (tabId: string) =>
+    ipcRenderer.invoke("browserview:switch-tab", tabId),
+  closeTab: (tabId: string) =>
+    ipcRenderer.invoke("browserview:close-tab", tabId),
+  getTabs: () => ipcRenderer.invoke("browserview:get-tabs"),
+  onTabUpdated: (
+    callback: (data: { id: string; title: string; url: string }) => void,
+  ) => {
+    ipcRenderer.on("browserview:tab-updated", (_, data) => callback(data));
+  },
+
+  // Legacy BrowserView operations (backward compatibility)
   createBrowserView: (bounds: {
     x: number;
     y: number;

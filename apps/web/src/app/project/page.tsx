@@ -98,6 +98,12 @@ function ProjectContent() {
   );
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
+  const [browserTabs, setBrowserTabs] = useState<
+    Array<{ id: string; title: string; url: string; isActive: boolean }>
+  >([]);
+  const [activeBrowserTabId, setActiveBrowserTabId] = useState<string | null>(
+    null,
+  );
   const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // Map server IDs to their index for log routing before IDs are assigned
@@ -456,7 +462,44 @@ function ProjectContent() {
         setDevToolsLogs((prev) => [...prev, logData]);
       });
     }
+
+    // Listen for tab updates
+    if (api.onTabUpdated) {
+      api.onTabUpdated((data) => {
+        console.log("🔖 Tab updated:", data);
+        setBrowserTabs((prev) =>
+          prev.map((tab) =>
+            tab.id === data.id
+              ? { ...tab, title: data.title, url: data.url }
+              : tab,
+          ),
+        );
+      });
+    }
   }, [api]);
+
+  // Load initial tabs when browser view is ready
+  useEffect(() => {
+    const loadTabs = async () => {
+      if (!api?.getTabs || !browserViewReady) return;
+
+      try {
+        const result = await api.getTabs();
+        if (result.success && result.tabs) {
+          console.log("📂 Loaded tabs:", result.tabs);
+          setBrowserTabs(result.tabs);
+          const activeTab = result.tabs.find((t) => t.isActive);
+          if (activeTab) {
+            setActiveBrowserTabId(activeTab.id);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load tabs:", error);
+      }
+    };
+
+    loadTabs();
+  }, [api, browserViewReady]);
 
   if (!projectPath) {
     return (
@@ -497,6 +540,121 @@ function ProjectContent() {
               {servers.length} server{servers.length > 1 ? "s" : ""}
             </p>
           </div>
+
+          {/* Browser Tabs */}
+          {browserTabs.length > 0 && (
+            <div className="flex items-center gap-1 ml-4 pl-4 border-l border-gray-300">
+              {browserTabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={`flex items-center gap-2 px-3 py-1 rounded-md transition-colors cursor-pointer max-w-[200px] ${
+                    tab.isActive || tab.id === activeBrowserTabId
+                      ? "bg-gray-100 text-gray-900"
+                      : "bg-white hover:bg-gray-50 text-gray-600"
+                  }`}
+                  onClick={async () => {
+                    if (api?.switchTab && tab.id !== activeBrowserTabId) {
+                      await api.switchTab(tab.id);
+                      setActiveBrowserTabId(tab.id);
+                    }
+                  }}
+                >
+                  <span className="text-xs truncate">
+                    {tab.title || "New Tab"}
+                  </span>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      if (api?.closeTab && browserTabs.length > 1) {
+                        await api.closeTab(tab.id);
+                        setBrowserTabs((prev) =>
+                          prev.filter((t) => t.id !== tab.id),
+                        );
+                        // If closed tab was active, switch to first remaining tab
+                        if (tab.id === activeBrowserTabId) {
+                          const remaining = browserTabs.filter(
+                            (t) => t.id !== tab.id,
+                          );
+                          if (remaining.length > 0) {
+                            await api.switchTab(remaining[0].id);
+                            setActiveBrowserTabId(remaining[0].id);
+                          }
+                        }
+                      }
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                    title="Close tab"
+                  >
+                    <svg
+                      className="w-3 h-3"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {/* New Tab Button */}
+              <button
+                onClick={async () => {
+                  if (!api?.createTab || !previewContainerRef.current) return;
+
+                  const container = previewContainerRef.current;
+                  const rect = container.getBoundingClientRect();
+
+                  const xOffset = showTerminal ? 384 : 0;
+                  const widthReduction = showTerminal ? 384 : 0;
+
+                  try {
+                    const result = await api.createTab({
+                      x: Math.round(rect.left + xOffset),
+                      y: Math.round(rect.top),
+                      width: Math.round(rect.width - widthReduction),
+                      height: Math.round(rect.height),
+                    });
+
+                    if (result.success) {
+                      setBrowserTabs((prev) => [
+                        ...prev,
+                        {
+                          id: result.tabId,
+                          title: result.title,
+                          url: result.url,
+                          isActive: true,
+                        },
+                      ]);
+                      setActiveBrowserTabId(result.tabId);
+                    }
+                  } catch (error) {
+                    console.error("Failed to create new tab:", error);
+                  }
+                }}
+                className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+                title="New tab"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2.5">
           {/* Browser Navigation Controls */}

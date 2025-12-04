@@ -1,29 +1,36 @@
 import { ipcMain, BrowserView, BrowserWindow } from "electron";
 
-let previewView: BrowserView | null = null;
+interface BrowserTab {
+  id: string;
+  view: BrowserView;
+  title: string;
+  url: string;
+}
+
+let browserTabs: Map<string, BrowserTab> = new Map();
+let activeTabId: string | null = null;
+
+function generateTabId(): string {
+  return `tab_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
 
 export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
   console.log("Registering BrowserView IPC handlers...");
 
-  // Create and attach BrowserView for preview
+  // Create a new tab
   ipcMain.handle(
-    "browserview:create",
+    "browserview:create-tab",
     async (
       event,
       bounds: { x: number; y: number; width: number; height: number },
+      url?: string,
     ) => {
       try {
-        console.log("🌐 Creating BrowserView with bounds:", bounds);
-
-        // Remove existing view if any
-        if (previewView) {
-          mainWindow.removeBrowserView(previewView);
-          (previewView.webContents as any).destroy();
-          previewView = null;
-        }
+        const tabId = generateTabId();
+        console.log(`🌐 Creating new tab ${tabId} with bounds:`, bounds);
 
         // Create new BrowserView
-        previewView = new BrowserView({
+        const view = new BrowserView({
           webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -32,18 +39,50 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
           },
         });
 
-        mainWindow.addBrowserView(previewView);
-        previewView.setBounds(bounds);
-        previewView.setAutoResize({
-          width: true,
-          height: true,
+        // Listen for title updates
+        view.webContents.on("page-title-updated", (event, title) => {
+          const tab = browserTabs.get(tabId);
+          if (tab) {
+            tab.title = title;
+            browserTabs.set(tabId, tab);
+            mainWindow.webContents.send("browserview:tab-updated", {
+              id: tabId,
+              title,
+              url: tab.url,
+            });
+          }
         });
 
-        // Listen for console messages from the browser
-        previewView.webContents.on(
+        // Listen for navigation
+        view.webContents.on("did-navigate", (event, url) => {
+          const tab = browserTabs.get(tabId);
+          if (tab) {
+            tab.url = url;
+            browserTabs.set(tabId, tab);
+            mainWindow.webContents.send("browserview:tab-updated", {
+              id: tabId,
+              title: tab.title,
+              url,
+            });
+          }
+        });
+
+        // Listen for new windows (popups like Google OAuth)
+        view.webContents.setWindowOpenHandler((details) => {
+          console.log("🪟 New window requested:", details.url);
+          // Create a new tab for the popup
+          mainWindow.webContents
+            .executeJavaScript(
+              `window.electronAPI.createTab({ url: "${details.url}" })`,
+            )
+            .catch(console.error);
+          return { action: "deny" }; // Prevent default window
+        });
+
+        // Listen for console messages
+        view.webContents.on(
           "console-message",
           (event, level, message, line, sourceId) => {
-            // level: 0 = log, 1 = warning, 2 = error, 3 = debug, 4 = info
             const logType =
               level === 2
                 ? "error"
@@ -55,36 +94,159 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
                       ? "info"
                       : "log";
 
-            const logData = {
+            mainWindow.webContents.send("browser:console-log", {
               message,
               type: logType,
               source: sourceId,
               line,
-            };
-
-            console.log("🌐 Browser console:", logData);
-            mainWindow.webContents.send("browser:console-log", logData);
+              tabId,
+            });
           },
         );
 
-        console.log("✅ BrowserView created successfully");
-        return { success: true };
+        const tab: BrowserTab = {
+          id: tabId,
+          view,
+          title: url || "New Tab",
+          url: url || "",
+        };
+
+        browserTabs.set(tabId, tab);
+
+        // If this is the first tab or no active tab, make it active
+        if (!activeTabId || browserTabs.size === 1) {
+          mainWindow.addBrowserView(view);
+          view.setBounds(bounds);
+          view.setAutoResize({ width: true, height: true });
+          activeTabId = tabId;
+        }
+
+        // Load URL if provided
+        if (url) {
+          await view.webContents.loadURL(url);
+        }
+
+        console.log(`✅ Tab ${tabId} created successfully`);
+        return {
+          success: true,
+          tabId,
+          title: tab.title,
+          url: tab.url,
+        };
       } catch (error: any) {
-        console.error("❌ Failed to create BrowserView:", error);
-        throw new Error(`Failed to create BrowserView: ${error.message}`);
+        console.error("❌ Failed to create tab:", error);
+        throw new Error(`Failed to create tab: ${error.message}`);
       }
     },
   );
 
-  // Navigate BrowserView to URL
-  ipcMain.handle("browserview:navigate", async (event, url: string) => {
+  // Switch to a different tab
+  ipcMain.handle("browserview:switch-tab", async (event, tabId: string) => {
     try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
+      const tab = browserTabs.get(tabId);
+      if (!tab) {
+        throw new Error(`Tab ${tabId} not found`);
       }
 
-      console.log(`🔗 Navigating BrowserView to ${url}`);
-      await previewView.webContents.loadURL(url);
+      // Remove current active tab view
+      if (activeTabId) {
+        const currentTab = browserTabs.get(activeTabId);
+        if (currentTab) {
+          mainWindow.removeBrowserView(currentTab.view);
+        }
+      }
+
+      // Add the new tab view
+      mainWindow.addBrowserView(tab.view);
+
+      // Get the bounds from renderer
+      const bounds = await mainWindow.webContents.executeJavaScript(
+        `window.electronAPI.getBrowserViewBounds()`,
+      );
+      tab.view.setBounds(bounds);
+      tab.view.setAutoResize({ width: true, height: true });
+
+      activeTabId = tabId;
+      console.log(`🔀 Switched to tab ${tabId}`);
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("❌ Failed to switch tab:", error);
+      throw new Error(`Failed to switch tab: ${error.message}`);
+    }
+  });
+
+  // Close a tab
+  ipcMain.handle("browserview:close-tab", async (event, tabId: string) => {
+    try {
+      const tab = browserTabs.get(tabId);
+      if (!tab) {
+        throw new Error(`Tab ${tabId} not found`);
+      }
+
+      // If this is the active tab, switch to another tab first
+      if (activeTabId === tabId) {
+        mainWindow.removeBrowserView(tab.view);
+
+        // Find another tab to activate
+        const remainingTabs = Array.from(browserTabs.entries()).filter(
+          ([id]) => id !== tabId,
+        );
+        if (remainingTabs.length > 0) {
+          const [nextTabId, nextTab] = remainingTabs[0];
+          mainWindow.addBrowserView(nextTab.view);
+          activeTabId = nextTabId;
+        } else {
+          activeTabId = null;
+        }
+      }
+
+      // Destroy the view
+      (tab.view.webContents as any).destroy();
+      browserTabs.delete(tabId);
+
+      console.log(`🔴 Tab ${tabId} closed`);
+      return { success: true };
+    } catch (error: any) {
+      console.error("❌ Failed to close tab:", error);
+      throw new Error(`Failed to close tab: ${error.message}`);
+    }
+  });
+
+  // Get all tabs
+  ipcMain.handle("browserview:get-tabs", async () => {
+    try {
+      const tabs = Array.from(browserTabs.entries()).map(([id, tab]) => ({
+        id,
+        title: tab.title,
+        url: tab.url,
+        isActive: id === activeTabId,
+      }));
+
+      return { success: true, tabs };
+    } catch (error: any) {
+      console.error("❌ Failed to get tabs:", error);
+      throw new Error(`Failed to get tabs: ${error.message}`);
+    }
+  });
+
+  // Navigate active tab to URL
+  ipcMain.handle("browserview:navigate", async (event, url: string) => {
+    try {
+      if (!activeTabId) {
+        throw new Error("No active tab");
+      }
+
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      console.log(`🔗 Navigating active tab to ${url}`);
+      await tab.view.webContents.loadURL(url);
+      tab.url = url;
+      browserTabs.set(activeTabId, tab);
+
       console.log("✅ Navigation successful");
       return { success: true };
     } catch (error: any) {
@@ -93,7 +255,7 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
     }
   });
 
-  // Update BrowserView bounds
+  // Update active tab bounds
   ipcMain.handle(
     "browserview:set-bounds",
     async (
@@ -101,11 +263,16 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
       bounds: { x: number; y: number; width: number; height: number },
     ) => {
       try {
-        if (!previewView) {
-          throw new Error("BrowserView not created");
+        if (!activeTabId) {
+          return { success: true }; // No active tab, nothing to update
         }
 
-        previewView.setBounds(bounds);
+        const tab = browserTabs.get(activeTabId);
+        if (!tab) {
+          throw new Error("Active tab not found");
+        }
+
+        tab.view.setBounds(bounds);
         return { success: true };
       } catch (error: any) {
         console.error("❌ Failed to set bounds:", error);
@@ -114,66 +281,20 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
     },
   );
 
-  // Open DevTools for BrowserView
-  ipcMain.handle("browserview:open-devtools", async () => {
-    try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
-      }
-
-      previewView.webContents.openDevTools();
-      console.log("🔍 DevTools opened for BrowserView");
-      return { success: true };
-    } catch (error: any) {
-      console.error("❌ Failed to open DevTools:", error);
-      throw new Error(`Failed to open DevTools: ${error.message}`);
-    }
-  });
-
-  // Close DevTools for BrowserView
-  ipcMain.handle("browserview:close-devtools", async () => {
-    try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
-      }
-
-      previewView.webContents.closeDevTools();
-      console.log("🔍 DevTools closed for BrowserView");
-      return { success: true };
-    } catch (error: any) {
-      console.error("❌ Failed to close DevTools:", error);
-      throw new Error(`Failed to close DevTools: ${error.message}`);
-    }
-  });
-
-  // Destroy BrowserView
-  ipcMain.handle("browserview:destroy", async () => {
-    try {
-      if (!previewView) {
-        return { success: true };
-      }
-
-      console.log("🔴 Destroying BrowserView");
-      mainWindow.removeBrowserView(previewView);
-      (previewView.webContents as any).destroy();
-      previewView = null;
-      console.log("✅ BrowserView destroyed");
-      return { success: true };
-    } catch (error: any) {
-      console.error("❌ Failed to destroy BrowserView:", error);
-      throw new Error(`Failed to destroy BrowserView: ${error.message}`);
-    }
-  });
-
-  // Reload BrowserView
+  // Reload active tab
   ipcMain.handle("browserview:reload", async () => {
     try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
+      if (!activeTabId) {
+        throw new Error("No active tab");
       }
 
-      previewView.webContents.reload();
-      console.log("🔄 BrowserView reloaded");
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      tab.view.webContents.reload();
+      console.log("🔄 Active tab reloaded");
       return { success: true };
     } catch (error: any) {
       console.error("❌ Failed to reload:", error);
@@ -181,38 +302,51 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
     }
   });
 
-  // Navigate back in BrowserView
+  // Navigate back in active tab
   ipcMain.handle("browserview:go-back", async () => {
     try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
+      if (!activeTabId) {
+        throw new Error("No active tab");
       }
 
-      if (previewView.webContents.canGoBack()) {
-        previewView.webContents.goBack();
-        console.log("⬅️ BrowserView navigated back");
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
       }
-      return { success: true, canGoBack: previewView.webContents.canGoBack() };
+
+      if (tab.view.webContents.canGoBack()) {
+        tab.view.webContents.goBack();
+        console.log("⬅️ Active tab navigated back");
+      }
+      return {
+        success: true,
+        canGoBack: tab.view.webContents.canGoBack(),
+      };
     } catch (error: any) {
       console.error("❌ Failed to go back:", error);
       throw new Error(`Failed to go back: ${error.message}`);
     }
   });
 
-  // Navigate forward in BrowserView
+  // Navigate forward in active tab
   ipcMain.handle("browserview:go-forward", async () => {
     try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
+      if (!activeTabId) {
+        throw new Error("No active tab");
       }
 
-      if (previewView.webContents.canGoForward()) {
-        previewView.webContents.goForward();
-        console.log("➡️ BrowserView navigated forward");
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      if (tab.view.webContents.canGoForward()) {
+        tab.view.webContents.goForward();
+        console.log("➡️ Active tab navigated forward");
       }
       return {
         success: true,
-        canGoForward: previewView.webContents.canGoForward(),
+        canGoForward: tab.view.webContents.canGoForward(),
       };
     } catch (error: any) {
       console.error("❌ Failed to go forward:", error);
@@ -220,23 +354,159 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
     }
   });
 
-  // Check navigation state
+  // Check navigation state of active tab
   ipcMain.handle("browserview:can-navigate", async () => {
     try {
-      if (!previewView) {
-        throw new Error("BrowserView not created");
+      if (!activeTabId) {
+        throw new Error("No active tab");
+      }
+
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
       }
 
       return {
         success: true,
-        canGoBack: previewView.webContents.canGoBack(),
-        canGoForward: previewView.webContents.canGoForward(),
+        canGoBack: tab.view.webContents.canGoBack(),
+        canGoForward: tab.view.webContents.canGoForward(),
       };
     } catch (error: any) {
       console.error("❌ Failed to check navigation state:", error);
       throw new Error(`Failed to check navigation state: ${error.message}`);
     }
   });
+
+  // Open DevTools for active tab
+  ipcMain.handle("browserview:open-devtools", async () => {
+    try {
+      if (!activeTabId) {
+        throw new Error("No active tab");
+      }
+
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      tab.view.webContents.openDevTools();
+      console.log("🔍 DevTools opened for active tab");
+      return { success: true };
+    } catch (error: any) {
+      console.error("❌ Failed to open DevTools:", error);
+      throw new Error(`Failed to open DevTools: ${error.message}`);
+    }
+  });
+
+  // Close DevTools for active tab
+  ipcMain.handle("browserview:close-devtools", async () => {
+    try {
+      if (!activeTabId) {
+        throw new Error("No active tab");
+      }
+
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      tab.view.webContents.closeDevTools();
+      console.log("🔍 DevTools closed for active tab");
+      return { success: true };
+    } catch (error: any) {
+      console.error("❌ Failed to close DevTools:", error);
+      throw new Error(`Failed to close DevTools: ${error.message}`);
+    }
+  });
+
+  // Destroy all tabs
+  ipcMain.handle("browserview:destroy", async () => {
+    try {
+      console.log("🔴 Destroying all tabs");
+
+      for (const [tabId, tab] of browserTabs.entries()) {
+        mainWindow.removeBrowserView(tab.view);
+        (tab.view.webContents as any).destroy();
+      }
+
+      browserTabs.clear();
+      activeTabId = null;
+
+      console.log("✅ All tabs destroyed");
+      return { success: true };
+    } catch (error: any) {
+      console.error("❌ Failed to destroy tabs:", error);
+      throw new Error(`Failed to destroy tabs: ${error.message}`);
+    }
+  });
+
+  // Legacy handler for backward compatibility (creates first tab)
+  ipcMain.handle(
+    "browserview:create",
+    async (
+      event,
+      bounds: { x: number; y: number; width: number; height: number },
+    ) => {
+      // Directly call the create-tab logic for backward compatibility
+      try {
+        const tabId = generateTabId();
+        console.log(`🌐 Creating legacy tab ${tabId} with bounds:`, bounds);
+
+        const view = new BrowserView({
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            devTools: true,
+          },
+        });
+
+        // Listen for console messages
+        view.webContents.on(
+          "console-message",
+          (event, level, message, line, sourceId) => {
+            const logType =
+              level === 2
+                ? "error"
+                : level === 1
+                  ? "warning"
+                  : level === 3
+                    ? "debug"
+                    : level === 4
+                      ? "info"
+                      : "log";
+
+            mainWindow.webContents.send("browser:console-log", {
+              message,
+              type: logType,
+              source: sourceId,
+              line,
+              tabId,
+            });
+          },
+        );
+
+        const tab: BrowserTab = {
+          id: tabId,
+          view,
+          title: "Main",
+          url: "",
+        };
+
+        browserTabs.set(tabId, tab);
+        mainWindow.addBrowserView(view);
+        view.setBounds(bounds);
+        view.setAutoResize({ width: true, height: true });
+        activeTabId = tabId;
+
+        console.log(`✅ Legacy tab ${tabId} created successfully`);
+        return { success: true };
+      } catch (error: any) {
+        console.error("❌ Failed to create legacy tab:", error);
+        throw new Error(`Failed to create legacy tab: ${error.message}`);
+      }
+    },
+  );
 
   console.log("✅ BrowserView IPC handlers registered");
 }
