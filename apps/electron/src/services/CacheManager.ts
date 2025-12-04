@@ -79,9 +79,40 @@ export class CacheManager {
         );
         console.log(`Updated commands for ${projectPath}`);
       } else {
-        console.warn(
-          `No cache entry found for ${projectPath}, cannot update commands`,
+        // Create minimal cache entry if it doesn't exist
+        console.log(
+          `Creating new cache entry with commands for ${projectPath}`,
         );
+        const minimalEntry: CacheEntry = {
+          analysis: {
+            projectPath,
+            detection: {
+              framework: "Custom",
+              packageManager: "Unknown",
+              startCommand: commands[0] || "",
+              buildCommand: "",
+              defaultPort: 3000,
+              confidence: 1.0,
+              reasoning: "Commands configured manually by user",
+            },
+            analyzedAt: new Date().toISOString(),
+            fileAnalysis: {
+              fileCount: 0,
+              totalSize: 0,
+              dependencies: [],
+            },
+          },
+          cachedAt: new Date().toISOString(),
+          projectHash: this.hashProjectPath(projectPath),
+          commands,
+        };
+
+        await fs.writeFile(
+          cachePath,
+          JSON.stringify(minimalEntry, null, 2),
+          "utf-8",
+        );
+        console.log(`Created cache entry with commands for ${projectPath}`);
       }
     } catch (error) {
       console.error("Error updating commands:", error);
