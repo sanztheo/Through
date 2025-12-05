@@ -43,7 +43,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
     error: "text-red-500 bg-red-500/10",
   }[toolCall.status];
 
-  const argString = Object.entries(toolCall.args)
+  const argString = Object.entries(toolCall.args || {})
     .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join(", ");
 
@@ -70,7 +70,7 @@ export function ToolCallCard({ toolCall }: ToolCallCardProps) {
         <div className="px-3 pb-3 text-xs">
           <div className="bg-gray-900 text-gray-100 rounded p-2 font-mono overflow-x-auto">
             <div className="text-gray-400 mb-1">// Args</div>
-            <pre>{JSON.stringify(toolCall.args, null, 2)}</pre>
+            <pre>{JSON.stringify(toolCall.args || {}, null, 2)}</pre>
             {toolCall.result !== undefined && toolCall.result !== null && (
               <>
                 <div className="text-gray-400 mt-2 mb-1">// Result</div>
