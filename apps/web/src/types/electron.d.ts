@@ -164,7 +164,7 @@ export interface ElectronAPI {
 
   // Settings
   getSettings: () => Promise<{ settings: any; models: any[] }>;
-  setSettings: (settings: { aiModel?: string }) => Promise<void>;
+  setSettings: (settings: { aiModel?: string; defaultClonePath?: string }) => Promise<void>;
 
   // Chat
   streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<void>;

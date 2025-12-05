@@ -43,6 +43,26 @@ export function GitCloneModal({ onClose, onComplete }: GitCloneModalProps) {
   const [projectPath, setProjectPath] = useState<string>("");
   const [projectName, setProjectName] = useState<string>("");
 
+  // Load default clone path from settings
+  useEffect(() => {
+    const loadDefaultPath = async () => {
+      if (typeof window === "undefined" || !window.electronAPI) return;
+      
+      try {
+        const result = await window.electronAPI.getSettings();
+        if (result?.settings?.defaultClonePath) {
+          setDestPath(result.settings.defaultClonePath);
+          // Skip directly to URL step if we have a default path
+          setStep("url");
+        }
+      } catch (error) {
+        console.error("Failed to load default clone path:", error);
+      }
+    };
+
+    loadDefaultPath();
+  }, []);
+
   // Setup progress listeners
   useEffect(() => {
     if (typeof window === "undefined" || !window.electronAPI) return;

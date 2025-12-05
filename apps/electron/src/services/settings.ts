@@ -4,10 +4,12 @@ import { app } from "electron";
 
 export interface AppSettings {
   aiModel: string;
+  defaultClonePath: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
   aiModel: "gpt-5-mini", // Default to cheapest
+  defaultClonePath: "", // Empty = ask each time
 };
 
 function getSettingsPath(): string {
