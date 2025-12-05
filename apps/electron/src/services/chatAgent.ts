@@ -1,11 +1,12 @@
 import { openai } from "@ai-sdk/openai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
-import { generateText, tool, stepCountIs } from "ai";
+import { Experimental_Agent as Agent, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { glob } from "glob";
+import { spawn } from "child_process";
 import { getSettings, AI_MODELS } from "./settings.js";
 
 export interface ChatMessage {
@@ -22,14 +23,306 @@ export interface ToolCall {
 }
 
 export interface StreamChunk {
-  type: "text" | "tool-call" | "tool-result" | "done" | "error";
+  type: "text" | "tool-call" | "tool-result" | "step" | "done" | "error";
   content?: string;
   toolCall?: ToolCall;
+  stepNumber?: number;
   error?: string;
 }
 
 /**
- * Stream a chat response with tools - based on codeAgent.ts pattern
+ * Get the model instance based on settings
+ */
+function getModelInstance() {
+  const settings = getSettings();
+  const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS[0];
+  
+  switch (modelConfig.provider) {
+    case "anthropic":
+      return anthropic(modelConfig.modelId);
+    case "google":
+      return google(modelConfig.modelId);
+    case "openai":
+    default:
+      return openai(modelConfig.modelId);
+  }
+}
+
+/**
+ * Execute a shell command
+ */
+async function executeCommand(command: string, cwd: string): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  return new Promise((resolve) => {
+    const proc = spawn("bash", ["-c", command], { cwd });
+    let stdout = "";
+    let stderr = "";
+    
+    proc.stdout.on("data", (data) => { stdout += data.toString(); });
+    proc.stderr.on("data", (data) => { stderr += data.toString(); });
+    
+    proc.on("close", (code) => {
+      resolve({ stdout: stdout.slice(0, 5000), stderr: stderr.slice(0, 2000), exitCode: code ?? 0 });
+    });
+    
+    proc.on("error", (err) => {
+      resolve({ stdout, stderr: err.message, exitCode: 1 });
+    });
+    
+    // Timeout after 30s
+    setTimeout(() => {
+      proc.kill();
+      resolve({ stdout, stderr: "Command timed out", exitCode: 124 });
+    }, 30000);
+  });
+}
+
+/**
+ * Create the coding agent with all tools
+ */
+function createCodingAgent(
+  projectPath: string, 
+  onToolCall?: (name: string, args: any) => void, 
+  onToolResult?: (name: string, result: any) => void,
+  onStep?: (stepNumber: number) => void
+) {
+  const tools = {
+    // 📂 List files in directory
+    listFiles: tool({
+      description: "List files and folders in a directory. Use this FIRST to explore the project structure.",
+      inputSchema: z.object({
+        directory: z.string().optional().describe("Path relative to project root. Defaults to root."),
+      }),
+      execute: async ({ directory }) => {
+        const dir = directory || ".";
+        console.log(`📂 Listing: ${dir}`);
+        onToolCall?.("listFiles", { directory: dir });
+        
+        try {
+          const fullPath = path.join(projectPath, dir);
+          const entries = await fs.readdir(fullPath, { withFileTypes: true });
+          const result = entries
+            .filter(e => !e.name.startsWith(".") && !["node_modules", "dist", "build", ".next"].includes(e.name))
+            .map(e => ({ name: e.name, type: e.isDirectory() ? "dir" : "file" }));
+          
+          onToolResult?.("listFiles", result);
+          return result;
+        } catch (error: any) {
+          return { error: error.message };
+        }
+      },
+    }),
+
+    // 🔍 Search in project
+    searchInProject: tool({
+      description: "Search for text, code, class names, or selectors in project files. Returns files with matching lines.",
+      inputSchema: z.object({
+        query: z.string().describe("Text/code to search for"),
+        fileExtensions: z.array(z.string()).optional().describe("Filter by extensions, e.g. ['css', 'tsx']"),
+      }),
+      execute: async ({ query, fileExtensions }) => {
+        console.log(`🔍 Searching: "${query}"`);
+        onToolCall?.("searchInProject", { query });
+        
+        const extensions = fileExtensions || ["tsx", "jsx", "ts", "js", "css", "scss", "html", "json"];
+        const pattern = `**/*.{${extensions.join(",")}}`;
+        
+        try {
+          const files = await glob(pattern, {
+            cwd: projectPath,
+            ignore: ["**/node_modules/**", "**/dist/**", "**/.next/**"],
+          });
+
+          const results: Array<{ file: string; line: number; preview: string }> = [];
+
+          for (const file of files.slice(0, 50)) {
+            try {
+              const content = await fs.readFile(path.join(projectPath, file), "utf-8");
+              const lines = content.split("\n");
+              
+              lines.forEach((line, idx) => {
+                if (line.includes(query)) {
+                  results.push({ 
+                    file, 
+                    line: idx + 1, 
+                    preview: line.trim().substring(0, 100) 
+                  });
+                }
+              });
+            } catch {}
+          }
+
+          console.log(`   Found ${results.length} matches`);
+          onToolResult?.("searchInProject", { count: results.length });
+          return results.slice(0, 20);
+        } catch (error: any) {
+          return { error: error.message };
+        }
+      },
+    }),
+
+    // 📖 Read file
+    readFile: tool({
+      description: "Read the content of a file. ALWAYS use this before editing to get exact content.",
+      inputSchema: z.object({
+        filePath: z.string().describe("Path to file relative to project root"),
+      }),
+      execute: async ({ filePath }) => {
+        console.log(`📖 Reading: ${filePath}`);
+        onToolCall?.("readFile", { filePath });
+        
+        try {
+          const content = await fs.readFile(path.join(projectPath, filePath), "utf-8");
+          onToolResult?.("readFile", { path: filePath, lines: content.split("\n").length });
+          return { content: content.slice(0, 20000), path: filePath };
+        } catch (error: any) {
+          return { error: error.message };
+        }
+      },
+    }),
+
+    // ✏️ Replace in file
+    replaceInFile: tool({
+      description: "Replace a block of code in a file. The 'search' must EXACTLY match existing code (copy from readFile).",
+      inputSchema: z.object({
+        filePath: z.string().describe("Path to file"),
+        search: z.string().describe("EXACT existing code to replace (including whitespace)"),
+        replace: z.string().describe("New code to insert"),
+        explanation: z.string().describe("Brief explanation of the change"),
+      }),
+      execute: async ({ filePath, search, replace, explanation }) => {
+        console.log(`✏️ Editing: ${filePath}`);
+        console.log(`   ${explanation}`);
+        onToolCall?.("replaceInFile", { filePath, explanation });
+        
+        try {
+          const fullPath = path.join(projectPath, filePath);
+          const content = await fs.readFile(fullPath, "utf-8");
+          
+          const normalizedContent = content.replace(/\r\n/g, "\n");
+          const normalizedSearch = search.replace(/\r\n/g, "\n");
+
+          if (!normalizedContent.includes(normalizedSearch)) {
+            console.error("❌ Search block not found!");
+            return { 
+              success: false, 
+              error: "Search block not found. Copy the EXACT text from readFile, including all whitespace and indentation." 
+            };
+          }
+
+          const newContent = normalizedContent.replace(normalizedSearch, replace);
+          await fs.writeFile(fullPath, newContent, "utf-8");
+
+          console.log(`✅ Updated: ${filePath}`);
+          onToolResult?.("replaceInFile", { success: true, filePath });
+          return { success: true, filePath, explanation };
+        } catch (error: any) {
+          return { error: error.message };
+        }
+      },
+    }),
+
+    // 📝 Write new file
+    writeFile: tool({
+      description: "Create a new file or completely overwrite an existing file.",
+      inputSchema: z.object({
+        filePath: z.string().describe("Path for the new file"),
+        content: z.string().describe("Complete file content"),
+        explanation: z.string().describe("Why creating this file"),
+      }),
+      execute: async ({ filePath, content, explanation }) => {
+        console.log(`📝 Creating: ${filePath}`);
+        onToolCall?.("writeFile", { filePath, explanation });
+        
+        try {
+          const fullPath = path.join(projectPath, filePath);
+          await fs.mkdir(path.dirname(fullPath), { recursive: true });
+          await fs.writeFile(fullPath, content, "utf-8");
+          
+          console.log(`✅ Created: ${filePath}`);
+          onToolResult?.("writeFile", { success: true, filePath });
+          return { success: true, filePath, explanation };
+        } catch (error: any) {
+          return { error: error.message };
+        }
+      },
+    }),
+
+    // 🖥️ Run command
+    runCommand: tool({
+      description: "Execute a shell command in the project directory. Use for npm, git, etc.",
+      inputSchema: z.object({
+        command: z.string().describe("Command to run (e.g., 'npm install', 'git status')"),
+      }),
+      execute: async ({ command }) => {
+        console.log(`🖥️ Running: ${command}`);
+        onToolCall?.("runCommand", { command });
+        
+        const result = await executeCommand(command, projectPath);
+        onToolResult?.("runCommand", { exitCode: result.exitCode });
+        return result;
+      },
+    }),
+  };
+
+  return new Agent({
+    model: getModelInstance(),
+    
+    system: `You are Through, an expert AI coding assistant. You modify code directly on the user's filesystem.
+
+<workflow>
+1. EXPLORE: Use listFiles to understand project structure
+2. SEARCH: Use searchInProject to find relevant files  
+3. READ: Use readFile to get exact content before editing
+4. EDIT: Use replaceInFile with EXACT matching text
+5. VERIFY: Read the file again if needed to confirm changes
+</workflow>
+
+<rules>
+- NEVER guess file paths - always explore first
+- ALWAYS read a file before editing it
+- Use replaceInFile for surgical edits, writeFile only for new files
+- If replaceInFile fails, read the file again and retry with exact text
+- Be concise in explanations
+- Execute the full task - don't stop halfway
+</rules>
+
+<style>
+- Act like an expert senior engineer
+- Don't apologize - just fix issues
+- Explain what you're doing briefly
+</style>`,
+
+    tools,
+    
+    // Allow up to 20 steps for complex tasks
+    stopWhen: stepCountIs(20),
+    
+    // Dynamic step preparation
+    prepareStep: async ({ stepNumber, steps }) => {
+      console.log(`\n🔄 Step ${stepNumber + 1}`);
+      onStep?.(stepNumber + 1);
+      
+      // Force exploration on first step if no tool was called yet
+      if (stepNumber === 0) {
+        return {
+          toolChoice: "auto" as const,
+        };
+      }
+      
+      // After 10 steps, encourage wrapping up
+      if (stepNumber >= 10) {
+        return {
+          system: `You are Through. You've taken ${stepNumber} steps. Try to complete the task now or explain what's blocking you.`,
+        };
+      }
+      
+      return {};
+    },
+  });
+}
+
+/**
+ * Stream a chat response using the Agent class
  */
 export async function streamChatAgent(params: {
   projectPath: string;
@@ -38,280 +331,60 @@ export async function streamChatAgent(params: {
 }): Promise<void> {
   const { projectPath, messages, onChunk } = params;
 
-  console.log("🤖 Starting chat agent...");
-  console.log("📂 Project:", projectPath);
+  const settings = getSettings();
+  const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS[0];
+  
+  console.log("\n" + "=".repeat(50));
+  console.log("🤖 Through Agent Starting");
+  console.log(`📂 Project: ${projectPath}`);
+  console.log(`🧠 Model: ${modelConfig.name}`);
+  console.log(`📜 Messages: ${messages.length}`);
+  console.log("=".repeat(50));
 
   try {
-    // Define tools using the correct SDK syntax (same as codeAgent.ts)
-    const searchInProjectTool = tool({
-      description: "Search for text, CSS selectors, class names, or content in project files. Returns matching files with line numbers.",
-      inputSchema: z.object({
-        query: z.string().describe("The text, class name, or selector to search for"),
-        fileExtensions: z.array(z.string()).optional().describe("File extensions to search, e.g. ['tsx', 'css']. Defaults to common web files."),
-      }),
-      execute: async ({ query, fileExtensions }) => {
-        console.log(`🔍 Searching for: "${query}"`);
-        
-        const extensions = fileExtensions || ["tsx", "jsx", "ts", "js", "vue", "svelte", "css", "scss", "html"];
-        const pattern = `**/*.{${extensions.join(",")}}`;
-        
-        try {
-          const files = await glob(pattern, { 
-            cwd: projectPath,
-            ignore: ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.next/**"],
-          });
-
-          const results: Array<{ file: string; lines: number[]; preview: string }> = [];
-
-          for (const file of files.slice(0, 50)) {
-            const filePath = path.join(projectPath, file);
-            try {
-              const content = await fs.readFile(filePath, "utf-8");
-              if (content.includes(query)) {
-                const lines = content.split("\n");
-                const matchingLines: number[] = [];
-                let preview = "";
-
-                lines.forEach((line, index) => {
-                  if (line.includes(query)) {
-                    matchingLines.push(index + 1);
-                    if (!preview) {
-                      preview = line.trim().substring(0, 100);
-                    }
-                  }
-                });
-
-                if (matchingLines.length > 0) {
-                  results.push({ file, lines: matchingLines, preview });
-                }
-              }
-            } catch (e) {
-              // Skip files that can't be read
-            }
-          }
-
-          console.log(`📁 Found ${results.length} matching files`);
-          return results;
-        } catch (error: any) {
-          return { error: error.message };
-        }
+    const agent = createCodingAgent(
+      projectPath,
+      (name, args) => {
+        onChunk({
+          type: "tool-call",
+          toolCall: { id: `${name}_${Date.now()}`, name, args, status: "running" }
+        });
       },
-    });
-
-    const readFileTool = tool({
-      description: "Read the content of a file from the project",
-      inputSchema: z.object({
-        filePath: z.string().describe("Relative path to the file from project root"),
-      }),
-      execute: async ({ filePath }) => {
-        console.log(`📖 Reading: ${filePath}`);
-        try {
-          const fullPath = path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath);
-          const content = await fs.readFile(fullPath, "utf-8");
-          return { content, path: filePath };
-        } catch (error: any) {
-          return { error: error.message };
-        }
+      (name, result) => {
+        onChunk({
+          type: "tool-result",
+          toolCall: { id: `${name}_${Date.now()}`, name, args: {}, result, status: "completed" }
+        });
       },
-    });
-
-    const replaceInFileTool = tool({
-      description: "Replace a specific block of code in a file. SAFER than rewriting the whole file.",
-      inputSchema: z.object({
-        filePath: z.string().describe("Relative path to the file"),
-        search: z.string().describe("The EXACT existing code block to replace (must match character-for-character, including whitespace/indentation)"),
-        replace: z.string().describe("The new code block to insert"),
-        explanation: z.string().describe("Why this change is being made"),
-      }),
-      execute: async ({ filePath, search, replace, explanation }) => {
-        console.log(`✏️ Patching: ${filePath}`);
-        
-        try {
-          const fullPath = path.join(projectPath, filePath);
-          const content = await fs.readFile(fullPath, "utf-8");
-
-          // Normalize line endings for better matching
-          const normalizedContent = content.replace(/\r\n/g, "\n");
-          const normalizedSearch = search.replace(/\r\n/g, "\n");
-
-          if (!normalizedContent.includes(normalizedSearch)) {
-            console.error("❌ Search block not found in file");
-            return { 
-              success: false, 
-              error: "Original code block not found in file. Please ensure 'search' matches EXACTLY the existing code, including indentation. Use readFile to verify." 
-            };
-          }
-
-          // Perform replacement
-          const newContent = normalizedContent.replace(normalizedSearch, replace);
-          await fs.writeFile(fullPath, newContent, "utf-8");
-
-          console.log(`✅ File patched: ${filePath}`);
-          
-          // Notify frontend about the tool result
-          onChunk({
-            type: "tool-result",
-            toolCall: {
-              id: `replace-${Date.now()}`,
-              name: "replaceInFile",
-              args: { filePath, explanation },
-              result: { success: true, filePath, explanation },
-              status: "completed"
-            }
-          });
-          
-          return { success: true, filePath, explanation };
-        } catch (error: any) {
-          return { error: error.message };
-        }
-      },
-    });
-
-    const listFilesTool = tool({
-      description: "List files in a directory to understand project structure",
-      inputSchema: z.object({
-        directory: z.string().optional().describe("Relative path to directory. Defaults to project root."),
-      }),
-      execute: async ({ directory }) => {
-        const dir = directory || ".";
-        console.log(`📂 Listing: ${dir}`);
-        
-        try {
-          const fullPath = path.join(projectPath, dir);
-          const entries = await fs.readdir(fullPath, { withFileTypes: true });
-          
-          return entries
-            .filter(e => !e.name.startsWith(".") && e.name !== "node_modules")
-            .map(e => ({
-              name: e.name,
-              type: e.isDirectory() ? "directory" : "file",
-            }));
-        } catch (error: any) {
-          return { error: error.message };
-        }
-      },
-    });
-
-    // Get the selected model from settings
-    const settings = getSettings();
-    const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS.find(m => m.id === "gpt-4o-mini")!;
-    
-    console.log(`🧠 Using model: ${modelConfig.name} (${modelConfig.provider})`);
-    
-    // Get the model instance based on provider
-    const getModel = () => {
-      switch (modelConfig.provider) {
-        case "anthropic":
-          return anthropic(modelConfig.modelId);
-        case "google":
-          return google(modelConfig.modelId);
-        case "openai":
-        default:
-          return openai(modelConfig.modelId);
+      (stepNumber) => {
+        onChunk({ type: "step", stepNumber });
       }
-    };
+    );
 
-    // Convert messages to CoreMessage format for the SDK
-    const coreMessages = messages.map(m => ({
-      role: m.role as "user" | "assistant",
-      content: m.content
-    }));
+    // Build conversation for context
+    const prompt = messages.map(m => 
+      `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
+    ).join("\n\n");
 
-    console.log("📜 Sending", coreMessages.length, "messages to model");
+    // Use streaming for real-time updates
+    const stream = agent.stream({ prompt });
 
-    // Notify that we're starting
-    onChunk({ type: "text", content: "" });
-
-    const result = await generateText({
-      model: getModel(),
-      stopWhen: stepCountIs(10),
-      system: `You are Through, a powerful agentic AI coding assistant, inspired by Windsurf and Cursor.
-You operate directly on the user's local filesystem in real-time.
-
-<identity>
-You are pair programming with a USER to solve their coding task.
-The task may require creating a new codebase, modifying or debugging an existing codebase, or simply answering a question.
-You have access to tools to search, read, list, and modify files.
-</identity>
-
-<tool_usage_rules>
-1. **Explore First**: Do not guess file paths. If you don't know the file structure, use listFiles or searchInProject IMMEDIATELY.
-2. **Read Before Write**: Before using replaceInFile, YOU MUST read the file using readFile to ensure you have the EXACT existing content for the search block.
-3. **Surgical Edits**: Use replaceInFile for all code changes. Do not rewrite entire files unless necessary. The search block must be unique and match exact whitespace.
-4. **No Chat Code**: NEVER output code blocks in your text response if you intend to apply them. Use the tool directly. Only show snippets if explaining something.
-5. **Tool Naming**: Do not tell the user "I am using searchInProject". Just say "I'm searching for the component...".
-6. **Recovery**: If a tool fails (e.g., search block not found), ANALYZE the error, read the file again to get the fresh content, and RETRY immediately with corrected arguments.
-</tool_usage_rules>
-
-<workflow_guidance>
-- **For Styling**: If asked to change design, find the relevant CSS/Tailwind file first.
-- **For Logic**: specific logic changes should be verified by reading the import chain if needed.
-- **Errors**: If you see a compilation error or runtime error, use searchInProject to find the symbol/log causing it.
-</workflow_guidance>
-
-<style>
-- Be concise.
-- Act like an expert senior engineer.
-- Do not apologize excessively; just fix it.
-</style>`,
-      messages: coreMessages,
-      tools: {
-        searchInProject: searchInProjectTool,
-        readFile: readFileTool,
-        replaceInFile: replaceInFileTool,
-        listFiles: listFilesTool,
-      },
-      onStepFinish: (step) => {
-        // Debug: log the step structure
-        console.log("📊 Step finished:", JSON.stringify(step, null, 2).slice(0, 500));
-        
-        // Send tool calls to frontend
-        if (step.toolCalls && step.toolCalls.length > 0) {
-          for (const tc of step.toolCalls) {
-            const toolCall = tc as any;
-            console.log("🔧 Tool call object:", Object.keys(toolCall));
-            onChunk({
-              type: "tool-call",
-              toolCall: {
-                id: toolCall.toolCallId || toolCall.id || `call_${Date.now()}`,
-                name: toolCall.toolName || toolCall.name,
-                args: toolCall.args || toolCall.input || {},
-                status: "running"
-              }
-            });
-          }
-        }
-        
-        // Send tool results to frontend
-        if (step.toolResults && step.toolResults.length > 0) {
-          for (const tr of step.toolResults) {
-            const toolResult = tr as any;
-            console.log("📦 Tool result object:", Object.keys(toolResult));
-            onChunk({
-              type: "tool-result",
-              toolCall: {
-                id: toolResult.toolCallId || toolResult.id || `result_${Date.now()}`,
-                name: toolResult.toolName || toolResult.name,
-                args: toolResult.args || toolResult.input || {},
-                result: toolResult.result,
-                status: "completed"
-              }
-            });
-          }
-        }
+    // Stream text chunks
+    for await (const chunk of stream.textStream) {
+      if (chunk) {
+        onChunk({ type: "text", content: chunk });
       }
-    });
-
-    // Send the final text response
-    if (result.text) {
-      onChunk({ type: "text", content: result.text });
     }
+    
+    console.log("\n" + "=".repeat(50));
+    console.log("✅ Agent Completed");
+    console.log("=".repeat(50) + "\n");
 
     onChunk({ type: "done" });
 
   } catch (error: any) {
-    console.error("❌ Chat Agent Error:", error);
-    onChunk({ type: "error", error: error.message || "An unexpected error occurred" });
+    console.error("❌ Agent Error:", error);
+    onChunk({ type: "error", error: error.message || "Agent failed" });
     onChunk({ type: "done" });
   }
 }
