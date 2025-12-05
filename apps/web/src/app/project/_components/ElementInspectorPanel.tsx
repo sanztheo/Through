@@ -1,14 +1,33 @@
-import React from "react";
+import React, { useState } from "react";
 import { ElementInfo } from "../_hooks/useElementInspector";
-import { X, Copy, Check } from "lucide-react";
+import { X, Copy, Check, Sparkles, Loader2, CheckCircle, XCircle } from "lucide-react";
+
+interface AgentResult {
+  success: boolean;
+  message: string;
+  modifiedFile?: string;
+  backupFile?: string;
+}
 
 interface ElementInspectorPanelProps {
   element: ElementInfo | null;
+  projectPath: string | null;
+  api: any;
   onClose: () => void;
 }
 
-export function ElementInspectorPanel({ element, onClose }: ElementInspectorPanelProps) {
-  const [copiedSelector, setCopiedSelector] = React.useState(false);
+export function ElementInspectorPanel({ 
+  element, 
+  projectPath,
+  api,
+  onClose 
+}: ElementInspectorPanelProps) {
+  const [copiedSelector, setCopiedSelector] = useState(false);
+  const [prompt, setPrompt] = useState("");
+  const [agentState, setAgentState] = useState<
+    "idle" | "loading" | "pending" | "accepted" | "rejected"
+  >("idle");
+  const [agentResult, setAgentResult] = useState<AgentResult | null>(null);
 
   if (!element) return null;
 
@@ -19,6 +38,67 @@ export function ElementInspectorPanel({ element, onClose }: ElementInspectorPane
       setTimeout(() => setCopiedSelector(false), 2000);
     } catch (e) {
       console.error("Failed to copy:", e);
+    }
+  };
+
+  const handleSubmitToAgent = async () => {
+    if (!prompt.trim() || !api?.runCodeAgent || !projectPath) return;
+
+    setAgentState("loading");
+    setAgentResult(null);
+
+    try {
+      const result = await api.runCodeAgent(element, prompt, projectPath);
+      console.log("🤖 Agent result:", result);
+      
+      setAgentResult(result);
+      if (result.success) {
+        setAgentState("pending");
+      } else {
+        setAgentState("idle");
+      }
+    } catch (error: any) {
+      console.error("Agent error:", error);
+      setAgentResult({
+        success: false,
+        message: error.message || "Agent failed",
+      });
+      setAgentState("idle");
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!agentResult?.backupFile || !api?.acceptAgentChange) return;
+
+    try {
+      await api.acceptAgentChange(agentResult.backupFile);
+      setAgentState("accepted");
+      setPrompt("");
+      
+      // Reset after a moment
+      setTimeout(() => {
+        setAgentState("idle");
+        setAgentResult(null);
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to accept:", error);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!agentResult?.backupFile || !api?.rejectAgentChange) return;
+
+    try {
+      await api.rejectAgentChange(agentResult.backupFile);
+      setAgentState("rejected");
+      
+      // Reset after a moment
+      setTimeout(() => {
+        setAgentState("idle");
+        setAgentResult(null);
+      }, 2000);
+    } catch (error) {
+      console.error("Failed to reject:", error);
     }
   };
 
@@ -115,61 +195,16 @@ export function ElementInspectorPanel({ element, onClose }: ElementInspectorPane
                 {Math.round(element.rect.height)}px
               </span>
             </div>
-            <div className="bg-gray-50 p-2 rounded">
-              <span className="text-gray-500">X:</span>
-              <span className="ml-1 font-mono text-gray-900">
-                {Math.round(element.rect.x)}px
-              </span>
-            </div>
-            <div className="bg-gray-50 p-2 rounded">
-              <span className="text-gray-500">Y:</span>
-              <span className="ml-1 font-mono text-gray-900">
-                {Math.round(element.rect.y)}px
-              </span>
-            </div>
           </div>
         </div>
 
-        {/* Box Model Preview */}
+        {/* Computed Styles (collapsed) */}
         <div className="px-3 py-2 border-b border-gray-100">
-          <div className="text-xs text-gray-500 mb-2">Box Model</div>
-          <div className="flex justify-center">
-            <div className="relative bg-orange-100 p-3 text-center text-[10px]">
-              <span className="absolute -top-1 left-1/2 -translate-x-1/2 text-orange-600 font-mono">
-                {element.computedStyle.margin || "0"}
-              </span>
-              <div className="bg-green-100 p-3">
-                <span className="absolute top-3 left-1/2 -translate-x-1/2 text-green-600 font-mono">
-                  {element.computedStyle.padding || "0"}
-                </span>
-                <div className="bg-blue-200 px-3 py-2 min-w-[60px]">
-                  <span className="font-mono text-blue-800">
-                    {Math.round(element.rect.width)} × {Math.round(element.rect.height)}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-center gap-4 mt-2 text-[10px]">
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-orange-200 rounded-sm" /> margin
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-green-200 rounded-sm" /> padding
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="w-2 h-2 bg-blue-200 rounded-sm" /> content
-            </span>
-          </div>
-        </div>
-
-        {/* Computed Styles */}
-        <div className="px-3 py-2 border-b border-gray-100">
-          <div className="text-xs text-gray-500 mb-2">Computed Styles</div>
+          <div className="text-xs text-gray-500 mb-2">Key Styles</div>
           <div className="space-y-1">
-            {Object.entries(element.computedStyle).map(([key, value]) => (
+            {Object.entries(element.computedStyle).slice(0, 6).map(([key, value]) => (
               <div key={key} className="flex items-center text-xs">
-                <span className="text-purple-600 font-mono w-28 truncate">{key}:</span>
+                <span className="text-purple-600 font-mono w-24 truncate">{key}:</span>
                 <span className="font-mono text-gray-700 truncate flex-1">
                   {formatCssValue(value)}
                 </span>
@@ -177,57 +212,111 @@ export function ElementInspectorPanel({ element, onClose }: ElementInspectorPane
             ))}
           </div>
         </div>
+      </div>
 
-        {/* Attributes */}
-        {element.attributes.length > 0 && (
-          <div className="px-3 py-2 border-b border-gray-100">
-            <div className="text-xs text-gray-500 mb-2">Attributes</div>
-            <div className="space-y-1">
-              {element.attributes.slice(0, 10).map((attr, i) => (
-                <div key={i} className="flex items-start text-xs">
-                  <span className="text-blue-600 font-mono w-20 truncate flex-shrink-0">
-                    {attr.name}
-                  </span>
-                  <span className="text-gray-400 mx-1">=</span>
-                  <span className="font-mono text-green-600 truncate">
-                    &quot;{attr.value.substring(0, 50)}{attr.value.length > 50 ? '...' : ''}&quot;
-                  </span>
-                </div>
-              ))}
-              {element.attributes.length > 10 && (
-                <div className="text-xs text-gray-400">
-                  +{element.attributes.length - 10} more attributes
-                </div>
+      {/* AI Agent Section */}
+      <div className="border-t border-gray-200 bg-gray-50 p-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles className="w-4 h-4 text-blue-500" />
+          <span className="text-sm font-medium text-gray-700">AI Modification</span>
+        </div>
+
+        {/* Input area */}
+        {(agentState === "idle" || agentState === "loading") && (
+          <>
+            <textarea
+              placeholder="Décris ce que tu veux modifier... (ex: 'change la couleur en rouge')"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              className="w-full p-2 border border-gray-300 rounded-lg text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              rows={2}
+              disabled={agentState === "loading"}
+            />
+            <button
+              onClick={handleSubmitToAgent}
+              disabled={agentState === "loading" || !prompt.trim()}
+              className="mt-2 w-full bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+            >
+              {agentState === "loading" ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" />
+                  Apply with AI
+                </>
               )}
+            </button>
+          </>
+        )}
+
+        {/* Pending state - waiting for accept/reject */}
+        {agentState === "pending" && agentResult && (
+          <div className="space-y-3">
+            <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+              <div className="flex items-center gap-2 text-green-800 font-medium text-sm">
+                <CheckCircle className="w-4 h-4" />
+                Modification appliquée!
+              </div>
+              <p className="text-xs text-green-600 mt-1">
+                {agentResult.message}
+              </p>
+              {agentResult.modifiedFile && (
+                <p className="text-xs text-green-500 mt-1 font-mono">
+                  📄 {agentResult.modifiedFile}
+                </p>
+              )}
+            </div>
+            
+            <div className="flex gap-2">
+              <button
+                onClick={handleAccept}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                Valider
+              </button>
+              <button
+                onClick={handleReject}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg font-medium text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <X className="w-4 h-4" />
+                Annuler
+              </button>
             </div>
           </div>
         )}
 
-        {/* Element Info */}
-        <div className="px-3 py-2">
-          <div className="text-xs text-gray-500 mb-2">Info</div>
-          <div className="space-y-1 text-xs">
-            <div className="flex">
-              <span className="text-gray-500 w-24">Children:</span>
-              <span className="text-gray-700">{element.childCount}</span>
+        {/* Accepted feedback */}
+        {agentState === "accepted" && (
+          <div className="p-3 bg-green-100 border border-green-300 rounded-lg">
+            <div className="flex items-center gap-2 text-green-800 font-medium text-sm">
+              <CheckCircle className="w-4 h-4" />
+              Modification validée!
             </div>
-            {element.parentTag && (
-              <div className="flex">
-                <span className="text-gray-500 w-24">Parent:</span>
-                <span className="text-purple-600 font-mono">&lt;{element.parentTag}&gt;</span>
-              </div>
-            )}
-            {element.textContent && (
-              <div className="mt-2">
-                <span className="text-gray-500">Text content:</span>
-                <div className="mt-1 p-2 bg-gray-50 rounded text-gray-600 font-mono text-[11px] break-words">
-                  {element.textContent.substring(0, 100)}
-                  {element.textContent.length > 100 ? '...' : ''}
-                </div>
-              </div>
-            )}
           </div>
-        </div>
+        )}
+
+        {/* Rejected feedback */}
+        {agentState === "rejected" && (
+          <div className="p-3 bg-yellow-100 border border-yellow-300 rounded-lg">
+            <div className="flex items-center gap-2 text-yellow-800 font-medium text-sm">
+              <XCircle className="w-4 h-4" />
+              Modification annulée, code restauré.
+            </div>
+          </div>
+        )}
+
+        {/* Error display */}
+        {agentState === "idle" && agentResult && !agentResult.success && (
+          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-lg">
+            <p className="text-xs text-red-600">
+              ❌ {agentResult.message}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

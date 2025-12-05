@@ -223,6 +223,8 @@ function ProjectContent() {
         {selectedElement && (
           <ElementInspectorPanel
             element={selectedElement}
+            projectPath={projectPath}
+            api={api}
             onClose={clearSelection}
           />
         )}

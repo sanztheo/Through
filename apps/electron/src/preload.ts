@@ -149,6 +149,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
       callback();
     });
   },
+
+  // AI Code Agent
+  runCodeAgent: (
+    elementInfo: any,
+    userPrompt: string,
+    projectPath: string,
+  ) =>
+    ipcRenderer.invoke("agent:run", {
+      elementInfo,
+      userPrompt,
+      projectPath,
+    }),
+  acceptAgentChange: (backupPath: string) =>
+    ipcRenderer.invoke("agent:accept", backupPath),
+  rejectAgentChange: (backupPath: string) =>
+    ipcRenderer.invoke("agent:reject", backupPath),
 });
 
 console.log("Preload script loaded");
+

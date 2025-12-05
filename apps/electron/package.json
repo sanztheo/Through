@@ -13,10 +13,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^2.0.77",
     "@through/native": "*",
     "@through/shared": "*",
+    "ai": "^5.0.107",
     "electron": "^28.0.0",
-    "openai": "^4.104.0"
+    "glob": "^13.0.0",
+    "openai": "^4.104.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
