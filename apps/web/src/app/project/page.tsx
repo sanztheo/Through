@@ -68,6 +68,7 @@ function ProjectContent() {
     requestModification,
     acceptModification,
     rejectModification,
+    togglePreview,
     dismissModification,
     loadingCount,
   } = useAgentModifications(api, projectPath);
@@ -260,6 +261,7 @@ function ProjectContent() {
             onRequestModification={requestModification}
             onAcceptModification={acceptModification}
             onRejectModification={rejectModification}
+            onTogglePreview={togglePreview}
             onDismissModification={dismissModification}
             onClose={() => setShowInspectorPanel(false)}
           />

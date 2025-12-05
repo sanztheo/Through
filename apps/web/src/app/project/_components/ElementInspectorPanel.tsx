@@ -11,6 +11,7 @@ interface ElementInspectorPanelProps {
   onRequestModification: (elementInfo: ElementInfo, prompt: string) => Promise<any>;
   onAcceptModification: (id: string) => void;
   onRejectModification: (id: string) => void;
+  onTogglePreview: (id: string) => void;
   onDismissModification: (id: string) => void;
   onClose: () => void;
 }
@@ -22,6 +23,7 @@ export function ElementInspectorPanel({
   onRequestModification,
   onAcceptModification,
   onRejectModification,
+  onTogglePreview,
   onDismissModification,
   onClose,
 }: ElementInspectorPanelProps) {
@@ -199,6 +201,7 @@ export function ElementInspectorPanel({
               modifications={modifications}
               onAccept={onAcceptModification}
               onReject={onRejectModification}
+              onTogglePreview={onTogglePreview}
               onDismiss={onDismissModification}
             />
           </div>

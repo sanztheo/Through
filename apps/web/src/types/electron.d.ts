@@ -159,6 +159,8 @@ export interface ElectronAPI {
   ) => Promise<{ success: boolean; message: string; data?: any }>;
   acceptAgentChange: (backupPath: string) => Promise<{ success: boolean }>;
   rejectAgentChange: (backupPath: string) => Promise<{ success: boolean }>;
+  previewOriginal: (backupPath: string) => Promise<{ success: boolean }>;
+  previewModified: (backupPath: string) => Promise<{ success: boolean }>;
 
   // Settings
   getSettings: () => Promise<{ settings: any; models: any[] }>;

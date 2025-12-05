@@ -168,6 +168,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("agent:accept", backupPath),
   rejectAgentChange: (backupPath: string) =>
     ipcRenderer.invoke("agent:reject", backupPath),
+  previewOriginal: (backupPath: string) =>
+    ipcRenderer.invoke("agent:preview-original", backupPath),
+  previewModified: (backupPath: string) =>
+    ipcRenderer.invoke("agent:preview-modified", backupPath),
 
   // Settings
   getSettings: () => ipcRenderer.invoke("settings:get"),

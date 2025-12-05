@@ -1,12 +1,13 @@
 import React from "react";
 import { AgentModification } from "../_hooks/useAgentModifications";
-import { Loader2, CheckCircle, XCircle, AlertCircle, Check, X } from "lucide-react";
+import { Loader2, CheckCircle, XCircle, AlertCircle, Check, X, Eye, EyeOff } from "lucide-react";
 
 interface PendingModificationsListProps {
   modifications: AgentModification[];
   onAccept: (id: string) => void;
   onReject: (id: string) => void;
   onDismiss: (id: string) => void;
+  onTogglePreview: (id: string) => void;
 }
 
 export function PendingModificationsList({
@@ -14,6 +15,7 @@ export function PendingModificationsList({
   onAccept,
   onReject,
   onDismiss,
+  onTogglePreview,
 }: PendingModificationsListProps) {
   if (modifications.length === 0) return null;
 
@@ -26,6 +28,7 @@ export function PendingModificationsList({
           onAccept={() => onAccept(mod.id)}
           onReject={() => onReject(mod.id)}
           onDismiss={() => onDismiss(mod.id)}
+          onTogglePreview={() => onTogglePreview(mod.id)}
         />
       ))}
     </div>
@@ -37,13 +40,15 @@ function ModificationItem({
   onAccept,
   onReject,
   onDismiss,
+  onTogglePreview,
 }: {
   modification: AgentModification;
   onAccept: () => void;
   onReject: () => void;
   onDismiss: () => void;
+  onTogglePreview: () => void;
 }) {
-  const { status, prompt, result, elementInfo } = modification;
+  const { status, prompt, result, elementInfo, isPreviewingOriginal } = modification;
 
   const statusConfig = {
     loading: {
@@ -56,7 +61,7 @@ function ModificationItem({
       bg: "bg-green-50",
       border: "border-green-200",
       icon: <CheckCircle className="w-4 h-4 text-green-500" />,
-      label: "À valider",
+      label: isPreviewingOriginal ? "Avant" : "À valider",
     },
     accepted: {
       bg: "bg-green-100",
@@ -106,6 +111,21 @@ function ModificationItem({
       {/* Actions */}
       {status === "pending" && (
         <div className="flex gap-1">
+          <button
+            onClick={onTogglePreview}
+            className={`flex items-center justify-center p-1.5 rounded transition-colors ${
+              isPreviewingOriginal 
+                ? "bg-purple-500 hover:bg-purple-600 text-white" 
+                : "bg-gray-200 hover:bg-gray-300 text-gray-600"
+            }`}
+            title={isPreviewingOriginal ? "Voir les modifications" : "Voir l'original"}
+          >
+            {isPreviewingOriginal ? (
+              <EyeOff className="w-3.5 h-3.5" />
+            ) : (
+              <Eye className="w-3.5 h-3.5" />
+            )}
+          </button>
           <button
             onClick={onAccept}
             className="flex-1 flex items-center justify-center gap-1 py-1 bg-green-500 hover:bg-green-600 text-white text-xs rounded transition-colors"

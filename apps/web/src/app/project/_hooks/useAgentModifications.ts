@@ -13,6 +13,7 @@ export interface AgentModification {
     backupFile?: string;
   };
   createdAt: Date;
+  isPreviewingOriginal?: boolean;
 }
 
 export function useAgentModifications(api: any, projectPath: string | null) {
@@ -35,6 +36,7 @@ export function useAgentModifications(api: any, projectPath: string | null) {
         prompt,
         status: "loading",
         createdAt: new Date(),
+        isPreviewingOriginal: false,
       };
 
       // Add to list
@@ -92,6 +94,11 @@ export function useAgentModifications(api: any, projectPath: string | null) {
         return false;
       }
 
+      // If we're previewing original, swap back to modified first
+      if (mod.isPreviewingOriginal) {
+        await api.previewModified(mod.result.backupFile);
+      }
+
       try {
         await api.acceptAgentChange(mod.result.backupFile);
         
@@ -123,6 +130,11 @@ export function useAgentModifications(api: any, projectPath: string | null) {
         return false;
       }
 
+      // If we're previewing original, swap back to modified first before rejecting
+      if (mod.isPreviewingOriginal) {
+        await api.previewModified(mod.result.backupFile);
+      }
+
       try {
         await api.rejectAgentChange(mod.result.backupFile);
         
@@ -146,6 +158,38 @@ export function useAgentModifications(api: any, projectPath: string | null) {
     [modifications, api]
   );
 
+  // Toggle between original and modified preview
+  const togglePreview = useCallback(
+    async (id: string) => {
+      const mod = modifications.find((m) => m.id === id);
+      if (!mod || !mod.result?.backupFile) {
+        return false;
+      }
+
+      try {
+        if (mod.isPreviewingOriginal) {
+          // Currently showing original, switch to modified
+          await api.previewModified(mod.result.backupFile);
+        } else {
+          // Currently showing modified, switch to original
+          await api.previewOriginal(mod.result.backupFile);
+        }
+
+        setModifications((prev) =>
+          prev.map((m) =>
+            m.id === id ? { ...m, isPreviewingOriginal: !m.isPreviewingOriginal } : m
+          )
+        );
+
+        return true;
+      } catch (error) {
+        console.error("Failed to toggle preview:", error);
+        return false;
+      }
+    },
+    [modifications, api]
+  );
+
   // Dismiss an error notification
   const dismissModification = useCallback((id: string) => {
     setModifications((prev) => prev.filter((m) => m.id !== id));
@@ -160,9 +204,11 @@ export function useAgentModifications(api: any, projectPath: string | null) {
     requestModification,
     acceptModification,
     rejectModification,
+    togglePreview,
     dismissModification,
     loadingCount,
     pendingCount,
     hasActiveModifications: loadingCount > 0 || pendingCount > 0,
   };
 }
+

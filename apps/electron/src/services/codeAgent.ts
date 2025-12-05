@@ -401,6 +401,42 @@ export async function rejectChange(backupPath: string): Promise<{ success: boole
 }
 
 /**
+ * Preview the original version (temporarily swap to show before state)
+ * This swaps the current file with the backup without deleting anything
+ */
+export async function previewOriginal(backupPath: string): Promise<{ success: boolean }> {
+  console.log(`👁️ Previewing original: ${backupPath}`);
+  
+  try {
+    const originalPath = backupPath.replace(".through-backup", "");
+    
+    // Read both files
+    const currentContent = await fs.readFile(originalPath, "utf-8");
+    const backupContent = await fs.readFile(backupPath, "utf-8");
+    
+    // Swap: put backup content in original file, current in backup
+    await fs.writeFile(originalPath, backupContent, "utf-8");
+    await fs.writeFile(backupPath, currentContent, "utf-8");
+    
+    return { success: true };
+  } catch (error: any) {
+    console.error("Failed to preview original:", error);
+    return { success: false };
+  }
+}
+
+/**
+ * Preview the modified version (swap back to show after state)
+ * This is the reverse of previewOriginal
+ */
+export async function previewModified(backupPath: string): Promise<{ success: boolean }> {
+  console.log(`👁️ Previewing modified: ${backupPath}`);
+  
+  // It's exactly the same swap operation
+  return previewOriginal(backupPath);
+}
+
+/**
  * Build context string about the selected element
  */
 function buildElementContext(element: ElementInfo): string {

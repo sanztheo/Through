@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow } from "electron";
-import { runCodeAgent, acceptChange, rejectChange, ElementInfo } from "../services/codeAgent.js";
+import { runCodeAgent, acceptChange, rejectChange, previewOriginal, previewModified, ElementInfo } from "../services/codeAgent.js";
 import { getSettings, saveSettings, AI_MODELS } from "../services/settings.js";
 
 export function registerAgentHandlers() {
@@ -48,6 +48,18 @@ export function registerAgentHandlers() {
   ipcMain.handle("agent:reject", async (event, backupPath: string) => {
     console.log("❌ IPC: Rejecting change...");
     return await rejectChange(backupPath);
+  });
+
+  // Preview original (toggle to show before state)
+  ipcMain.handle("agent:preview-original", async (event, backupPath: string) => {
+    console.log("👁️ IPC: Previewing original...");
+    return await previewOriginal(backupPath);
+  });
+
+  // Preview modified (toggle to show after state)
+  ipcMain.handle("agent:preview-modified", async (event, backupPath: string) => {
+    console.log("👁️ IPC: Previewing modified...");
+    return await previewModified(backupPath);
   });
 
   // Get settings
