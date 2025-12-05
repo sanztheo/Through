@@ -43,7 +43,8 @@ export async function runExecutorStep(
   const tools = {
     readFile: tool({
         description: "Read file content",
-        inputSchema: z.object({ filePath: z.string() }),
+        parameters: z.object({ filePath: z.string() }),
+        // @ts-ignore
         execute: async ({ filePath }: { filePath: string }) => {
             if (!filePath || typeof filePath !== 'string') throw new Error("Invalid filePath");
             const fullPath = path.join(projectPath, filePath);
@@ -53,7 +54,8 @@ export async function runExecutorStep(
     }),
     writeFile: tool({
         description: "Write file content",
-        inputSchema: z.object({ filePath: z.string(), content: z.string(), explanation: z.string() }),
+        parameters: z.object({ filePath: z.string(), content: z.string(), explanation: z.string() }),
+        // @ts-ignore
         execute: async ({ filePath, content }: { filePath: string; content: string }) => {
             if (!filePath || typeof filePath !== 'string') throw new Error("Invalid filePath");
             const fullPath = path.join(projectPath, filePath);
@@ -64,7 +66,8 @@ export async function runExecutorStep(
     }),
     listFiles: tool({
         description: "List directory files",
-        inputSchema: z.object({ directory: z.string() }),
+        parameters: z.object({ directory: z.string() }),
+        // @ts-ignore
         execute: async ({ directory }: { directory: string }) => {
             const dir = directory || ".";
             const fullPath = path.join(projectPath, dir);
@@ -74,7 +77,8 @@ export async function runExecutorStep(
     }),
     runCommand: tool({
         description: "Run terminal command",
-        inputSchema: z.object({ command: z.string() }),
+        parameters: z.object({ command: z.string() }),
+        // @ts-ignore
         execute: async ({ command }: { command: string }) => {
             return await executeCommand(command, projectPath);
         }
@@ -115,6 +119,7 @@ Be efficient. Once the step is done, you don't need to say much, just confirm co
             onChunk({ type: "text", content: text });
             fullText += text;
         } else if (chunk.type === "tool-call") {
+            console.log("🔧 Executor ToolChunk:", JSON.stringify(chunk, null, 2));
             toolCalls.push(chunk);
             onChunk({ 
                 type: "tool-call", 
