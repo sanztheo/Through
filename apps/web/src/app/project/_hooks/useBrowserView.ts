@@ -124,13 +124,11 @@ export function useBrowserView({
         const container = previewContainerRef.current;
         const rect = container.getBoundingClientRect();
 
-        const xOffset = showTerminal ? 384 : 0;
-        const widthReduction = showTerminal ? 384 : 0;
-
+        // Use container rect directly - layout already handles terminal/sidebar position
         await api.setBrowserViewBounds({
-          x: Math.round(rect.left + xOffset),
+          x: Math.round(rect.left),
           y: Math.round(rect.top),
-          width: Math.round(rect.width - widthReduction),
+          width: Math.round(rect.width),
           height: Math.round(rect.height),
         });
       } catch (error) {
@@ -217,13 +215,12 @@ export function useBrowserView({
       ) {
         const container = previewContainerRef.current;
         const rect = container.getBoundingClientRect();
-        const xOffset = showTerminal ? 384 : 0;
-        const widthReduction = showTerminal ? 384 : 0;
-
+        
+        // Use the container rect directly - it already accounts for terminal/sidebar
         await api.switchTab(tabId, {
-          x: Math.round(rect.left + xOffset),
+          x: Math.round(rect.left),
           y: Math.round(rect.top),
-          width: Math.round(rect.width - widthReduction),
+          width: Math.round(rect.width),
           height: Math.round(rect.height),
         });
         setActiveBrowserTabId(tabId);
@@ -253,13 +250,11 @@ export function useBrowserView({
           if (remaining.length > 0) {
             const container = previewContainerRef.current;
             const rect = container.getBoundingClientRect();
-            const xOffset = showTerminal ? 384 : 0;
-            const widthReduction = showTerminal ? 384 : 0;
 
             await api.switchTab(remaining[0].id, {
-              x: Math.round(rect.left + xOffset),
+              x: Math.round(rect.left),
               y: Math.round(rect.top),
-              width: Math.round(rect.width - widthReduction),
+              width: Math.round(rect.width),
               height: Math.round(rect.height),
             });
             setActiveBrowserTabId(remaining[0].id);
@@ -274,15 +269,13 @@ export function useBrowserView({
     const container = previewContainerRef.current;
     const rect = container.getBoundingClientRect();
 
-    const xOffset = showTerminal ? 384 : 0;
-    const widthReduction = showTerminal ? 384 : 0;
-
     try {
       const serverUrl = firstRunningServer?.url;
+      // Use the container rect directly - it already accounts for terminal/sidebar
       const result = await api.createTab({
-        x: Math.round(rect.left + xOffset),
+        x: Math.round(rect.left),
         y: Math.round(rect.top),
-        width: Math.round(rect.width - widthReduction),
+        width: Math.round(rect.width),
         height: Math.round(rect.height),
         url: serverUrl,
       });
