@@ -10,6 +10,7 @@ import { useProjectServers } from "./_hooks/useProjectServers";
 import { useBrowserView } from "./_hooks/useBrowserView";
 import { useEditor } from "./_hooks/useEditor";
 import { useElementInspector } from "./_hooks/useElementInspector";
+import { useAgentModifications } from "./_hooks/useAgentModifications";
 import { ProjectHeader } from "./_components/ProjectHeader";
 import { ElementInspectorPanel } from "./_components/ElementInspectorPanel";
 
@@ -22,6 +23,7 @@ function ProjectContent() {
   const { api } = useElectronAPI();
 
   const [showTerminal, setShowTerminal] = useState(false);
+  const [showInspectorPanel, setShowInspectorPanel] = useState(false);
 
   // Custom hooks
   const {
@@ -50,6 +52,24 @@ function ProjectContent() {
     handleEditorSave,
   } = useEditor({ api });
 
+  // Element Inspector
+  const {
+    isInspecting,
+    selectedElement,
+    toggleInspector,
+    clearSelection,
+  } = useElementInspector({ api });
+
+  // Agent Modifications (parallel)
+  const {
+    modifications,
+    requestModification,
+    acceptModification,
+    rejectModification,
+    dismissModification,
+    loadingCount,
+  } = useAgentModifications(api, projectPath);
+
   const {
     browserViewReady,
     previewContainerRef,
@@ -68,15 +88,24 @@ function ProjectContent() {
     showTerminal,
     viewMode,
     firstRunningServer,
+    showSidebar: showInspectorPanel || !!selectedElement,
   });
 
-  // Element Inspector
-  const {
-    isInspecting,
-    selectedElement,
-    toggleInspector,
-    clearSelection,
-  } = useElementInspector({ api });
+  // Custom toggle that opens panel if there are pending modifications
+  const handleToggleInspector = useCallback(() => {
+    if (modifications.length > 0 && !showInspectorPanel) {
+      setShowInspectorPanel(true);
+    }
+    toggleInspector();
+  }, [modifications.length, showInspectorPanel, toggleInspector]);
+
+  // Close panel handler
+  const handleCloseInspectorPanel = useCallback(() => {
+    clearSelection();
+    if (modifications.length === 0) {
+      setShowInspectorPanel(false);
+    }
+  }, [clearSelection, modifications.length]);
 
   // Handle back navigation
   const handleBackToHome = useCallback(async () => {
@@ -135,7 +164,8 @@ function ProjectContent() {
         onGoForward={handleGoForward}
         onReload={handleReload}
         onToggleTerminal={() => setShowTerminal(!showTerminal)}
-        onToggleInspector={toggleInspector}
+        onToggleInspector={handleToggleInspector}
+        pendingModificationsCount={modifications.length}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -220,12 +250,16 @@ function ProjectContent() {
         )}
 
         {/* Element Inspector Panel */}
-        {selectedElement && (
+        {(selectedElement || showInspectorPanel) && (
           <ElementInspectorPanel
             element={selectedElement}
-            projectPath={projectPath}
-            api={api}
-            onClose={clearSelection}
+            modifications={modifications}
+            loadingCount={loadingCount}
+            onRequestModification={requestModification}
+            onAcceptModification={acceptModification}
+            onRejectModification={rejectModification}
+            onDismissModification={dismissModification}
+            onClose={handleCloseInspectorPanel}
           />
         )}
       </div>

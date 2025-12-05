@@ -28,6 +28,7 @@ interface ProjectHeaderProps {
   onReload: () => void;
   onToggleTerminal: () => void;
   onToggleInspector: () => void;
+  pendingModificationsCount?: number;
 }
 
 export function ProjectHeader({
@@ -55,6 +56,7 @@ export function ProjectHeader({
   onReload,
   onToggleTerminal,
   onToggleInspector,
+  pendingModificationsCount = 0,
 }: ProjectHeaderProps) {
   const anyServerRunning = servers.some((s) => s.status === "running");
 
@@ -296,7 +298,7 @@ export function ProjectHeader({
         </div>
         <button
           onClick={onToggleInspector}
-          className={`p-1.5 rounded-md transition-colors ${
+          className={`p-1.5 rounded-md transition-colors relative ${
             isInspecting
               ? "bg-blue-100 text-blue-600"
               : "bg-white hover:bg-gray-100 text-gray-600"
@@ -304,6 +306,11 @@ export function ProjectHeader({
           title="Inspect Element"
         >
           <MousePointerClick className="w-4 h-4" />
+          {pendingModificationsCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-blue-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+              {pendingModificationsCount}
+            </span>
+          )}
         </button>
         <button
           onClick={onToggleTerminal}

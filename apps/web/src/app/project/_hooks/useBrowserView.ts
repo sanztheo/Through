@@ -6,6 +6,7 @@ interface UseBrowserViewProps {
   showTerminal: boolean;
   viewMode: "browser" | "editor";
   firstRunningServer: ServerInstance | undefined;
+  showSidebar?: boolean;
 }
 
 export function useBrowserView({
@@ -13,6 +14,7 @@ export function useBrowserView({
   showTerminal,
   viewMode,
   firstRunningServer,
+  showSidebar,
 }: UseBrowserViewProps) {
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -44,7 +46,10 @@ export function useBrowserView({
       }
     };
 
-    requestAnimationFrame(syncBounds);
+    // Use setTimeout to ensure DOM has updated
+    const timeoutId = setTimeout(() => {
+      requestAnimationFrame(syncBounds);
+    }, 50);
 
     let resizeObserver: ResizeObserver | null = null;
 
@@ -58,12 +63,13 @@ export function useBrowserView({
     window.addEventListener("resize", syncBounds);
 
     return () => {
+      clearTimeout(timeoutId);
       window.removeEventListener("resize", syncBounds);
       if (resizeObserver) {
         resizeObserver.disconnect();
       }
     };
-  }, [viewMode, showTerminal, browserViewReady, api]);
+  }, [viewMode, showTerminal, browserViewReady, api, showSidebar]);
 
   // Initialize BrowserView
   useEffect(() => {
