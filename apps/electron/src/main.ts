@@ -6,6 +6,7 @@ import { registerServerHandlers } from "./ipc/server";
 import { registerFilesystemHandlers } from "./ipc/filesystem";
 import { registerBrowserViewHandlers } from "./ipc/browserview";
 import { registerAgentHandlers } from "./ipc/agent";
+import { registerGitHandlers } from "./ipc/git";
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -100,6 +101,7 @@ app.whenReady().then(async () => {
     // Register BrowserView handlers after window is created
     if (mainWindow) {
       registerBrowserViewHandlers(mainWindow);
+      registerGitHandlers(mainWindow);
     }
   } catch (error) {
     console.error("Failed to initialize app:", error);

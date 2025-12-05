@@ -169,6 +169,34 @@ export interface ElectronAPI {
   // Chat
   streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<void>;
   onChatChunk: (callback: (chunk: any) => void) => () => void;
+
+  // Git operations
+  selectFolderForClone: () => Promise<string | null>;
+  cloneRepo: (url: string, destPath: string) => Promise<{
+    success: boolean;
+    projectPath: string;
+    projectName: string;
+    error?: string;
+  }>;
+  onCloneProgress: (callback: (progress: {
+    stage: string;
+    percent?: number;
+    message: string;
+  }) => void) => () => void;
+
+  // Setup/Install operations
+  installDependencies: (projectPath: string) => Promise<{
+    success: boolean;
+    packageManager: string;
+    error?: string;
+  }>;
+  cancelInstall: () => Promise<{ success: boolean }>;
+  onInstallProgress: (callback: (progress: {
+    stage: string;
+    percent?: number;
+    message: string;
+    packageManager?: string;
+  }) => void) => () => void;
 }
 
 declare global {

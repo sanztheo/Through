@@ -185,6 +185,33 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("chat:chunk", (_, chunk) => callback(chunk));
     return () => ipcRenderer.removeAllListeners("chat:chunk");
   },
+
+  // Git operations
+  selectFolderForClone: () => ipcRenderer.invoke("git:select-folder"),
+  cloneRepo: (url: string, destPath: string) =>
+    ipcRenderer.invoke("git:clone", { url, destPath }),
+  onCloneProgress: (callback: (progress: {
+    stage: string;
+    percent?: number;
+    message: string;
+  }) => void) => {
+    ipcRenderer.on("git:clone-progress", (_, progress) => callback(progress));
+    return () => ipcRenderer.removeAllListeners("git:clone-progress");
+  },
+
+  // Setup/Install operations
+  installDependencies: (projectPath: string) =>
+    ipcRenderer.invoke("setup:install-deps", projectPath),
+  cancelInstall: () => ipcRenderer.invoke("setup:cancel"),
+  onInstallProgress: (callback: (progress: {
+    stage: string;
+    percent?: number;
+    message: string;
+    packageManager?: string;
+  }) => void) => {
+    ipcRenderer.on("setup:install-progress", (_, progress) => callback(progress));
+    return () => ipcRenderer.removeAllListeners("setup:install-progress");
+  },
 });
 
 console.log("Preload script loaded");

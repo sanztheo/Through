@@ -8,6 +8,7 @@ import { ProjectList } from "@/components/ProjectList";
 import { ContextMenu } from "@/components/ContextMenu";
 import { ProjectSetupModal } from "@/components/ProjectSetupModal";
 import { SettingsModal } from "@/components/SettingsModal";
+import { GitCloneModal } from "@/components/GitCloneModal";
 
 interface ProjectInfo {
   path: string;
@@ -34,6 +35,7 @@ export default function HomePage() {
     name: string;
   } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showGitClone, setShowGitClone] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -116,6 +118,12 @@ export default function HomePage() {
     router.push(`/project?path=${encodeURIComponent(project.path)}`);
   };
 
+  const handleGitCloneComplete = (projectPath: string, projectName: string) => {
+    setShowGitClone(false);
+    // Show the project setup modal for the cloned project
+    setSelectedProject({ path: projectPath, name: projectName });
+  };
+
   const handleContextMenu = (e: React.MouseEvent, project: ProjectInfo) => {
     e.preventDefault();
     setContextMenu({
@@ -185,8 +193,9 @@ export default function HomePage() {
           </button>
 
           <button
-            disabled
-            className="bg-gray-50 cursor-not-allowed rounded-lg p-6 flex flex-col items-start gap-3 opacity-50"
+            onClick={() => setShowGitClone(true)}
+            disabled={!isElectron}
+            className="bg-gray-50 hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50 rounded-lg p-6 flex flex-col items-start gap-3 transition-colors"
           >
             <GitBranch className="w-6 h-6 text-gray-600" />
             <span className="text-base font-medium text-black">Clone repo</span>
@@ -253,6 +262,14 @@ export default function HomePage() {
         onClose={() => setShowSettings(false)}
         api={api}
       />
+
+      {/* Git Clone Modal */}
+      {showGitClone && (
+        <GitCloneModal
+          onClose={() => setShowGitClone(false)}
+          onComplete={handleGitCloneComplete}
+        />
+      )}
     </main>
   );
 }
