@@ -108,9 +108,13 @@ function ProjectContent() {
         canGoForward={canGoForward}
         showTerminal={showTerminal}
         onBackToHome={handleBackToHome}
-        onTabClick={handleTabClick}
+        onTabClick={(tabId) => {
+          handleTabClick(tabId);
+          setViewMode("browser");
+        }}
         onTabClose={handleTabClose}
         onNewTab={handleNewTab}
+        onEditorTabClose={handleEditorTabClose}
         onEditorTabClick={(tabId) => {
           setActiveEditorTabId(tabId);
           setViewMode("editor");

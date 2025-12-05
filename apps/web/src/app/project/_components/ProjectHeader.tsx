@@ -1,5 +1,5 @@
 import React from "react";
-import { Terminal } from "lucide-react";
+import { Terminal, X } from "lucide-react";
 import { ServerInstance } from "../_types";
 import { EditorTab } from "@/components/editor";
 
@@ -20,6 +20,7 @@ interface ProjectHeaderProps {
   onTabClose: (tabId: string) => void;
   onNewTab: () => void;
   onEditorTabClick: (tabId: string) => void;
+  onEditorTabClose: (tabId: string) => void;
   onSwitchToBrowser: () => void;
   onGoBack: () => void;
   onGoForward: () => void;
@@ -44,6 +45,7 @@ export function ProjectHeader({
   onTabClose,
   onNewTab,
   onEditorTabClick,
+  onEditorTabClose,
   onSwitchToBrowser,
   onGoBack,
   onGoForward,
@@ -149,10 +151,10 @@ export function ProjectHeader({
         {editorTabs.length > 0 && (
           <div className="flex items-center gap-1 ml-2 border-l border-gray-200 pl-2">
             {editorTabs.map((tab) => (
-              <button
+              <div
                 key={tab.id}
                 onClick={() => onEditorTabClick(tab.id)}
-                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors ${
+                className={`group flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm transition-colors cursor-pointer ${
                   viewMode === "editor" && activeEditorTabId === tab.id
                     ? "bg-blue-100 text-blue-700"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -162,7 +164,20 @@ export function ProjectHeader({
                 {tab.isModified && (
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                 )}
-              </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEditorTabClose(tab.id);
+                  }}
+                  className={`p-0.5 rounded-sm hover:bg-black/10 transition-colors ml-1 ${
+                    viewMode === "editor" && activeEditorTabId === tab.id
+                      ? "opacity-60 hover:opacity-100"
+                      : "opacity-0 group-hover:opacity-60"
+                  }`}
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
             ))}
             {viewMode === "editor" && (
               <button
