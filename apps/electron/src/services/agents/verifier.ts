@@ -1,6 +1,5 @@
-import { generateObject } from "ai";
+import { generateObject, LanguageModel } from "ai";
 import { z } from "zod";
-import { getModel } from "../settings";
 
 export const VerificationSchema = z.object({
   success: z.boolean().describe("Whether the step was completed successfully"),
@@ -11,12 +10,13 @@ export const VerificationSchema = z.object({
 export async function verifyStep(
     stepDescription: string,
     executionData: string, // summary or logs of what executor did
-    projectContext: string
+    projectContext: string,
+    model: LanguageModel
 ) {
   console.log("🕵️ Verifier: Checking step...");
 
   const result = await generateObject({
-    model: getModel(),
+    model: model,
     schema: VerificationSchema,
     system: `You are the VERIFIER. Your job is to check if the EXECUTOR correctly completed the assigned step.
 
@@ -33,6 +33,8 @@ ${executionData}
 4. Provide constructive feedback if retry is needed.
 </RULES>`,
     prompt: "Verify the execution.",
+    // @ts-ignore
+    mode: 'json',
   });
 
   return result.object;

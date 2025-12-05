@@ -1,11 +1,11 @@
-import { streamText, tool } from "ai";
+import { streamText, tool, LanguageModel } from "ai";
 import { z } from "zod";
 import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
 import { glob } from "glob";
 import { spawn } from "child_process";
-import { getModel } from "../settings";
+
 
 // Use the exact same tools as the original ChatAgent, but exposed for the Executor loop
 // We need to redefine them here or export them from chatAgent (refactoring chatAgent later is better)
@@ -37,13 +37,14 @@ export async function runExecutorStep(
     stepDescription: string,
     history: any[],
     projectPath: string,
-    onChunk: (chunk: any) => void
+    onChunk: (chunk: any) => void,
+    model: LanguageModel
 ) {
   // Define tools locally for now (duplicate of chatAgent, wil refactor later to shared source)
   const tools = {
     readFile: tool({
         description: "Read file content",
-        parameters: z.object({ filePath: z.string() }),
+        inputSchema: z.object({ filePath: z.string() }),
         // @ts-ignore
         execute: async ({ filePath }: { filePath: string }) => {
             if (!filePath || typeof filePath !== 'string') throw new Error("Invalid filePath");
@@ -54,7 +55,7 @@ export async function runExecutorStep(
     }),
     writeFile: tool({
         description: "Write file content",
-        parameters: z.object({ filePath: z.string(), content: z.string(), explanation: z.string() }),
+        inputSchema: z.object({ filePath: z.string(), content: z.string(), explanation: z.string() }),
         // @ts-ignore
         execute: async ({ filePath, content }: { filePath: string; content: string }) => {
             if (!filePath || typeof filePath !== 'string') throw new Error("Invalid filePath");
@@ -66,7 +67,7 @@ export async function runExecutorStep(
     }),
     listFiles: tool({
         description: "List directory files",
-        parameters: z.object({ directory: z.string() }),
+        inputSchema: z.object({ directory: z.string() }),
         // @ts-ignore
         execute: async ({ directory }: { directory: string }) => {
             const dir = directory || ".";
@@ -77,7 +78,7 @@ export async function runExecutorStep(
     }),
     runCommand: tool({
         description: "Run terminal command",
-        parameters: z.object({ command: z.string() }),
+        inputSchema: z.object({ command: z.string() }),
         // @ts-ignore
         execute: async ({ command }: { command: string }) => {
             return await executeCommand(command, projectPath);
@@ -95,83 +96,31 @@ Use the available tools to achieve this step.
 
 Be efficient. Once the step is done, you don't need to say much, just confirm completion.`;
 
-  // Manual loop for multi-step execution since maxSteps is not supported
-  let currentHistory = [...history]; // working copy
-  let finalResult = ""; 
-  
-  let steps = 0;
-  while (steps < 5) {
-    steps++;
-    
-    const result = await streamText({
-        model: getModel(),
-        system: systemPrompt,
-        messages: currentHistory,
-        tools: tools,
-    });
-
-    let fullText = "";
-    const toolCalls: any[] = [];
-
-    for await (const chunk of result.fullStream) {
-        if (chunk.type === "text-delta") {
-            const text = (chunk as any).textDelta || (chunk as any).text || "";
-            onChunk({ type: "text", content: text });
-            fullText += text;
-        } else if (chunk.type === "tool-call") {
+  // Use standard maxSteps behavior as requested
+  // @ts-ignore - maxSteps is supported in SDK v5 but types might be lagging or conflicting
+  return await streamText({
+    model: model,
+    system: systemPrompt,
+    messages: history,
+    tools: tools,
+    maxSteps: 5,
+    onChunk: (chunk: any) => {
+        // Forward chunks (text/tool) to the main Orchestrator callback
+        if (chunk.type === 'text-delta') {
+            onChunk({ type: "text", content: chunk.textDelta });
+        } else if (chunk.type === 'tool-call') {
             console.log("🔧 Executor ToolChunk:", JSON.stringify(chunk, null, 2));
-            toolCalls.push(chunk);
             onChunk({ 
                 type: "tool-call", 
-                toolCall: { id: (chunk as any).toolCallId, name: (chunk as any).toolName, args: (chunk as any).args, status: "running" } 
+                toolCall: { id: chunk.toolCallId, name: chunk.toolName, args: chunk.args, status: "running" } 
             });
-        }
-    }
-    
-    finalResult += fullText;
-    
-    currentHistory.push({
-        role: "assistant",
-        content: fullText,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-    });
-
-    if (toolCalls.length === 0) {
-        // No tools called, we are done
-        break;
-    }
-
-    // Execute tools and continue loop
-    const toolResults = [];
-    for (const tc of toolCalls) {
-        const toolName = tc.toolName as keyof typeof tools;
-        const toolInstance = tools[toolName];
-        
-        if (toolInstance && toolInstance.execute) {
-             const args = tc.args || {};
-             const result = await (toolInstance as any).execute(args, { toolCallId: tc.toolCallId, messages: currentHistory });
-             
-             toolResults.push({
-                toolCallId: tc.toolCallId,
-                toolName: tc.toolName,
-                result: result,
-             });
-
+        } else if (chunk.type === 'tool-result') {
+            // Forward result so UI can update the executing tool to "completed"
              onChunk({ 
                 type: "tool-result", 
-                toolCall: { id: tc.toolCallId, name: tc.toolName, result: result, status: "completed" } 
+                toolCall: { id: chunk.toolCallId, name: chunk.toolName, result: chunk.result, status: "completed" } 
             });
         }
     }
-    
-    currentHistory.push({
-        role: "tool",
-        content: toolResults,
-    });
-  }
-
-  return { 
-      text: Promise.resolve(finalResult),
-      fullStream: [],
-  };
+  } as any);
 }

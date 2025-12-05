@@ -1,6 +1,5 @@
-import { generateObject } from "ai";
+import { generateObject, LanguageModel } from "ai";
 import { z } from "zod";
-import { getModel } from "../settings";
 
 // Schema for the plan
 export const PlanSchema = z.object({
@@ -17,11 +16,11 @@ export const PlanSchema = z.object({
 
 export type Plan = z.infer<typeof PlanSchema>;
 
-export async function createPlan(userPrompt: string, projectContext: string) {
+export async function createPlan(userPrompt: string, projectContext: string, model: LanguageModel) {
   console.log("🧠 Coordinator: Creating plan for:", userPrompt);
 
   const result = await generateObject({
-    model: getModel(),
+    model: model,
     schema: PlanSchema,
     system: `You are the COORDINATOR of an advanced AI coding system.
 Your role is to ANALYZE the user's request and create a detailed, step-by-step PLAN for the EXECUTOR agent.
@@ -39,6 +38,8 @@ User Request: "${userPrompt}"
 5. Verification steps are crucial after code changes.
 </RULES>`,
     prompt: "Generate the implementation plan.",
+    // @ts-ignore
+    mode: 'json',
   });
 
   return result.object;

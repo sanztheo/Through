@@ -1,11 +1,13 @@
 import { createPlan, Plan } from "./coordinator";
 import { runExecutorStep } from "./executor";
 import { verifyStep } from "./verifier";
+import { LanguageModel } from "ai";
 
 export interface AgentContext {
   projectPath: string;
   onChunk: (chunk: any) => void;
   messages: any[]; // History
+  model: LanguageModel;
 }
 
 export async function runOrchestrator(userPrompt: string, context: AgentContext) {
@@ -16,7 +18,7 @@ export async function runOrchestrator(userPrompt: string, context: AgentContext)
   
   let plan: Plan;
   try {
-     plan = await createPlan(userPrompt, projectPath);
+     plan = await createPlan(userPrompt, projectPath, context.model);
   } catch (err: any) {
      onChunk({ type: "text", content: `❌ **Error creating plan:** ${err.message}\n` });
      return;
@@ -37,7 +39,7 @@ export async function runOrchestrator(userPrompt: string, context: AgentContext)
       // Execute
       let executionResult = "";
       try {
-          const result = await runExecutorStep(step.description, history, projectPath, onChunk);
+          const result = await runExecutorStep(step.description, history, projectPath, onChunk, context.model);
           // Accumulate the full text from the streamText result for verification context
           // streamText returns an object with a text stream, but we might need to await it fully?
           // The executor helper returns the streamText result object.
@@ -59,7 +61,7 @@ export async function runOrchestrator(userPrompt: string, context: AgentContext)
       // 3. VERIFICATION PHASE
       onChunk({ type: "text", content: `\n🕵️ **Verifying...**\n` });
       try {
-          const verification = await verifyStep(step.description, executionResult, projectPath);
+          const verification = await verifyStep(step.description, executionResult, projectPath, context.model);
           
           if (verification.success) {
               onChunk({ type: "text", content: `✅ **Verified:** ${verification.feedback}\n` });

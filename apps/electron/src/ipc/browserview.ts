@@ -640,15 +640,46 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
             let currentElement = null;
             let isPicking = true;
 
+            function getReactInfo(el) {
+              // Find React Fiber on the element
+              const key = Object.keys(el).find(k => k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$'));
+              if (!key) return null;
+              
+              let fiber = el[key];
+              if (!fiber) return null;
+
+              // Traverse up to find the closest component with source info
+              let curr = fiber;
+              while (curr) {
+                // Check if this fiber node is a user component (has source info)
+                const source = curr._debugSource || (curr.type && curr.type._debugSource);
+                
+                if (source && curr.type && typeof curr.type !== 'string') {
+                  const type = curr.type;
+                  const name = type.displayName || type.name || 'Anonymous';
+                  
+                  return {
+                    name,
+                    filePath: source.fileName,
+                    lineNumber: source.lineNumber,
+                    props: curr.memoizedProps || {}
+                  };
+                }
+                curr = curr.return;
+              }
+              return null;
+            }
+
             function getElementInfo(el) {
               const rect = el.getBoundingClientRect();
               const computedStyle = window.getComputedStyle(el);
+              const reactInfo = getReactInfo(el);
               
               // Get element selector
               let selector = el.tagName.toLowerCase();
               if (el.id) selector += '#' + el.id;
               if (el.className && typeof el.className === 'string') {
-                selector += '.' + el.className.trim().split(/\\s+/).join('.');
+                selector += '.' + el.className.trim().split(/\s+/).join('.');
               }
 
               return {
@@ -656,6 +687,13 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
                 id: el.id || null,
                 className: el.className || null,
                 selector: selector,
+                // Add React info if found
+                reactComponent: reactInfo ? {
+                  name: reactInfo.name,
+                  filePath: reactInfo.filePath,
+                  lineNumber: reactInfo.lineNumber,
+                  props: reactInfo.props // Warning: passing props might be heavy if they contain circular refs
+                } : undefined,
                 rect: {
                   x: rect.x,
                   y: rect.y,

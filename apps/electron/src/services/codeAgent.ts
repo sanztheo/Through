@@ -22,6 +22,12 @@ export interface ElementInfo {
   computedStyle: Record<string, string>;
   attributes: Array<{ name: string; value: string }>;
   textContent: string | null;
+  reactComponent?: {
+    name: string;
+    filePath: string;
+    lineNumber: number;
+    props: Record<string, any>;
+  };
 }
 
 export interface AgentResult {
@@ -70,6 +76,18 @@ export async function runCodeAgent(params: {
   try {
     // Build context about the element
     const elementContext = buildElementContext(elementInfo);
+    
+    // Check if we have a direct file hit
+    let directFilePath = "";
+    if (elementInfo.reactComponent && elementInfo.reactComponent.filePath) {
+      // Normalize path (handle absolute paths from React DevTools)
+      let sourcePath = elementInfo.reactComponent.filePath;
+      if (path.isAbsolute(sourcePath) && sourcePath.startsWith(projectPath)) {
+        sourcePath = path.relative(projectPath, sourcePath);
+      }
+      directFilePath = sourcePath;
+      console.log(`🎯 Direct React match: ${directFilePath} (Line ${elementInfo.reactComponent.lineNumber})`);
+    }
 
     // Define tools using the correct SDK syntax
     const searchInProjectTool = tool({
@@ -135,7 +153,8 @@ export async function runCodeAgent(params: {
       execute: async ({ filePath }) => {
         console.log(`📖 Reading: ${filePath}`);
         try {
-          const fullPath = path.join(projectPath, filePath);
+          // Handle absolute paths if passed by mistake, but prefer relative
+          const fullPath = path.isAbsolute(filePath) ? filePath : path.join(projectPath, filePath);
           const content = await fs.readFile(fullPath, "utf-8");
           return { content, path: filePath };
         } catch (error: any) {
@@ -261,9 +280,9 @@ ${elementContext}
 </CRITICAL_RULES>
 
 <WORKFLOW>
-1. Use searchInProject to find the element by its ID, classes, or text content
-2. Read the found file to understand its structure
-3. Modify ONLY that existing file - do not create new files
+${directFilePath ? `1. 🚨 IMMEDIATE ACTION: The user selected a React component at "${directFilePath}". READ THIS FILE FIRST.` : `1. Use searchInProject to find the element by its ID, classes, or text content`}
+${directFilePath ? `2. Modify this file directly to implement the request.` : `2. Read the found file to understand its structure`}
+${directFilePath ? `3. Only search elsewhere if strictly necessary.` : `3. Modify ONLY that existing file - do not create new files`}
 4. If styling needed, find existing CSS/SCSS files and modify those
 </WORKFLOW>
 
@@ -398,6 +417,26 @@ function buildElementContext(element: ElementInfo): string {
   
   if (element.textContent) {
     lines.push(`Text Content: "${element.textContent.substring(0, 100)}"`);
+  }
+
+  if (element.reactComponent) {
+    lines.push(`--- REACT COMPONENT ---`);
+    lines.push(`Component Name: <${element.reactComponent.name}>`);
+    lines.push(`Source File: ${element.reactComponent.filePath}`);
+    lines.push(`Line Number: ${element.reactComponent.lineNumber}`);
+    
+    // Add interesting props (skip children, complex objects)
+    const simpleProps = Object.entries(element.reactComponent.props)
+      .filter(([key, value]) => {
+        return key !== "children" && 
+               (typeof value === "string" || typeof value === "number" || typeof value === "boolean");
+      })
+      .map(([key, value]) => `${key}={${JSON.stringify(value)}}`);
+      
+    if (simpleProps.length > 0) {
+      lines.push(`Props: ${simpleProps.join(" ")}`);
+    }
+    lines.push(`-----------------------`);
   }
   
   // Add key computed styles

@@ -268,12 +268,37 @@ export async function streamChatAgent(params: {
   };
 
   try {
-    // Delegate to the new Multi-Agent Orchestrator
+    if (!projectPath) {
+      throw new Error("Project path is required for chat agent.");
+    }
+
+    // Get the selected model from settings (local resolution logic)
+    const settings = getSettings();
+    const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS.find(m => m.id === "gpt-4o-mini")!;
+    
+    console.log(`🧠 Using model: ${modelConfig.name} (${modelConfig.provider})`);
+    
+    // Get the model instance based on provider
+    const getLocalModel = () => {
+      switch (modelConfig.provider) {
+        case "anthropic":
+          return anthropic(modelConfig.modelId);
+        case "google":
+          return google(modelConfig.modelId);
+        case "openai":
+        default:
+          return openai(modelConfig.modelId);
+      }
+    };
+    
+    const model = getLocalModel();
+
     console.log("🚀 handing off to Multi-Agent Orchestrator");
     await runOrchestrator(messages[messages.length - 1].content, {
         projectPath,
         messages,
-        onChunk
+        onChunk,
+        model
     });
 
   } catch (error: any) {
