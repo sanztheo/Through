@@ -211,9 +211,13 @@ export async function streamChatAgent(params: {
       }
     };
 
-    // Get the last user message as the prompt
-    const lastUserMessage = messages.filter(m => m.role === "user").pop();
-    const userPrompt = lastUserMessage?.content || "";
+    // Convert messages to CoreMessage format for the SDK
+    const coreMessages = messages.map(m => ({
+      role: m.role as "user" | "assistant",
+      content: m.content
+    }));
+
+    console.log("📜 Sending", coreMessages.length, "messages to model");
 
     // Notify that we're starting
     onChunk({ type: "text", content: "" });
@@ -250,7 +254,7 @@ You have access to tools to search, read, list, and modify files.
 - Act like an expert senior engineer.
 - Do not apologize excessively; just fix it.
 </style>`,
-      prompt: userPrompt,
+      messages: coreMessages,
       tools: {
         searchInProject: searchInProjectTool,
         readFile: readFileTool,

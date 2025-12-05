@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import { Send, X, Trash2, Loader2, Bot, User } from "lucide-react";
 import { useChatAgent, ChatMessage } from "@/app/project/_hooks/useChatAgent";
 import { ToolCallCard } from "./ToolCallCard";
+import { MarkdownContent } from "./MarkdownContent";
 
 import { FileCode } from "lucide-react";
 import { useProjectFiles } from "@/app/project/_hooks/useProjectFiles";
@@ -206,12 +207,20 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : "bg-gray-100 text-gray-900"
           }`}
         >
-          {message.content || (message.isStreaming && (
-            <span className="flex items-center gap-2 text-gray-400">
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Thinking...
-            </span>
-          ))}
+          {message.content ? (
+            isUser ? (
+              message.content
+            ) : (
+              <MarkdownContent content={message.content} />
+            )
+          ) : (
+            message.isStreaming && (
+              <span className="flex items-center gap-2 text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Thinking...
+              </span>
+            )
+          )}
         </div>
 
         {/* Tool calls */}

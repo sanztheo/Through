@@ -34,3 +34,97 @@ body {
 .non-draggable {
   -webkit-app-region: no-drag;
 }
+
+/* Markdown Content Styling */
+.markdown-content h1 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content h2 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-top: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content p {
+  margin-bottom: 0.5rem;
+  line-height: 1.6;
+}
+
+.markdown-content ul {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.markdown-content li {
+  margin-bottom: 0.25rem;
+}
+
+.markdown-content code {
+  background-color: #e5e7eb;
+  color: #1f2937;
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+  font-family: ui-monospace, monospace;
+}
+
+.markdown-content pre {
+  background-color: #1f2937;
+  color: #f3f4f6;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+
+.markdown-content pre code {
+  background: none;
+  color: inherit;
+  padding: 0;
+}
+
+.markdown-content a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.markdown-content a:hover {
+  color: #1d4ed8;
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1rem;
+  margin: 0.5rem 0;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.markdown-content hr {
+  margin: 1rem 0;
+  border-color: #d1d5db;
+}
+
