@@ -107,3 +107,31 @@ export const AI_MODELS = [
     description: "Very cheap, good for simple tasks",
   },
 ];
+
+import { anthropic } from "@ai-sdk/anthropic";
+import { openai } from "@ai-sdk/openai";
+import { google } from "@ai-sdk/google";
+
+export function getModel() {
+  const settings = getSettings();
+  const modelDef = AI_MODELS.find((m) => m.id === settings.aiModel);
+  
+  if (!modelDef) {
+    // Fallback
+    console.warn("Model not found, using fallback:", settings.aiModel);
+    return openai("gpt-4o-mini");
+  }
+
+  // Handle specific model ID formats if necessary
+  // Vercel SDK generic providers usually take the model ID string directly
+  switch (modelDef.provider) {
+    case "anthropic":
+      return anthropic(modelDef.modelId);
+    case "openai":
+      return openai(modelDef.modelId);
+    case "google":
+      return google(modelDef.modelId);
+    default:
+      return openai("gpt-4o-mini");
+  }
+}

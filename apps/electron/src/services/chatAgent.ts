@@ -7,7 +7,9 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import { glob } from "glob";
 import { spawn } from "child_process";
-import { getSettings, AI_MODELS } from "./settings.js";
+import * as crypto from "crypto";
+import { getSettings, AI_MODELS, getModel } from "./settings.js";
+import { runOrchestrator } from "./agents/orchestrator";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -29,25 +31,7 @@ export interface StreamChunk {
   error?: string;
 }
 
-/**
- * Get the AI model based on settings
- */
-function getModel() {
-  const settings = getSettings();
-  const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS.find(m => m.id === "gpt-4o-mini")!;
-  
-  console.log(`🧠 Chat using model: ${modelConfig.name} (${modelConfig.provider})`);
-  
-  switch (modelConfig.provider) {
-    case "anthropic":
-      return anthropic(modelConfig.modelId);
-    case "google":
-      return google(modelConfig.modelId);
-    case "openai":
-    default:
-      return openai(modelConfig.modelId);
-  }
-}
+
 
 /**
  * Execute a terminal command
@@ -97,17 +81,26 @@ export async function streamChatAgent(params: {
       filePath: z.string().describe("Relative path to the file from project root"),
     }),
     execute: async ({ filePath }) => {
+      const toolId = crypto.randomUUID();
+      // Defensive check for argument
+      if (!filePath || typeof filePath !== 'string') {
+         const errorMsg = "Invalid argument: filePath must be a string";
+         onChunk({ type: "tool-call", toolCall: { id: toolId, name: "readFile", args: { filePath }, status: "running" } });
+         onChunk({ type: "tool-result", toolCall: { id: toolId, name: "readFile", args: { filePath }, result: { success: false, error: errorMsg }, status: "error" } });
+         return { success: false, error: errorMsg };
+      }
+
       const fullPath = path.join(projectPath, filePath);
-      onChunk({ type: "tool-call", toolCall: { id: Date.now().toString(), name: "readFile", args: { filePath }, status: "running" } });
+      onChunk({ type: "tool-call", toolCall: { id: toolId, name: "readFile", args: { filePath }, status: "running" } });
       
       try {
         const content = await fs.readFile(fullPath, "utf-8");
         const result = { success: true, content: content.slice(0, 10000) };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "readFile", args: { filePath }, result, status: "completed" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "readFile", args: { filePath }, result, status: "completed" } });
         return result;
       } catch (error: any) {
         const result = { success: false, error: error.message };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "readFile", args: { filePath }, result, status: "error" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "readFile", args: { filePath }, result, status: "error" } });
         return result;
       }
     },
@@ -121,22 +114,38 @@ export async function streamChatAgent(params: {
       explanation: z.string().describe("Brief explanation of changes"),
     }),
     execute: async ({ filePath, content, explanation }) => {
+      const toolId = crypto.randomUUID();
+      
+      if (!filePath || typeof filePath !== 'string') {
+         const errorMsg = "Invalid argument: filePath must be a string";
+         onChunk({ type: "tool-call", toolCall: { id: toolId, name: "writeFile", args: { filePath, explanation }, status: "running" } });
+         onChunk({ type: "tool-result", toolCall: { id: toolId, name: "writeFile", args: { filePath, explanation }, result: { success: false, error: errorMsg }, status: "error" } });
+         return { success: false, error: errorMsg };
+      }
+
       const fullPath = path.join(projectPath, filePath);
-      onChunk({ type: "tool-call", toolCall: { id: Date.now().toString(), name: "writeFile", args: { filePath, explanation }, status: "running" } });
+      onChunk({ type: "tool-call", toolCall: { id: toolId, name: "writeFile", args: { filePath, explanation }, status: "running" } });
       
       try {
-        await fs.access(fullPath);
-        const backupPath = fullPath + ".backup." + Date.now();
-        const originalContent = await fs.readFile(fullPath, "utf-8");
-        await fs.writeFile(backupPath, originalContent);
+        // Ensure parent directory exists
+        await fs.mkdir(path.dirname(fullPath), { recursive: true });
+
+        // Backup existing file if allowed/possible
+        try {
+            await fs.access(fullPath);
+            const backupPath = fullPath + ".backup." + Date.now();
+            const originalContent = await fs.readFile(fullPath, "utf-8");
+            await fs.writeFile(backupPath, originalContent);
+        } catch {}
+
         await fs.writeFile(fullPath, content);
         
-        const result = { success: true, message: `Modified ${filePath}: ${explanation}`, backupPath };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "writeFile", args: { filePath, explanation }, result, status: "completed" } });
+        const result = { success: true, message: `Modified ${filePath}: ${explanation}` };
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "writeFile", args: { filePath, explanation }, result, status: "completed" } });
         return result;
       } catch (error: any) {
         const result = { success: false, error: error.message };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "writeFile", args: { filePath, explanation }, result, status: "error" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "writeFile", args: { filePath, explanation }, result, status: "error" } });
         return result;
       }
     },
@@ -149,7 +158,8 @@ export async function streamChatAgent(params: {
       fileExtensions: z.array(z.string()).optional().describe("File extensions to include"),
     }),
     execute: async ({ query, fileExtensions }) => {
-      onChunk({ type: "tool-call", toolCall: { id: Date.now().toString(), name: "searchProject", args: { query }, status: "running" } });
+      const toolId = crypto.randomUUID();
+      onChunk({ type: "tool-call", toolCall: { id: toolId, name: "searchProject", args: { query }, status: "running" } });
       
       try {
         const extensions = fileExtensions || ["ts", "tsx", "js", "jsx", "css", "scss", "html", "vue", "svelte"];
@@ -177,11 +187,11 @@ export async function streamChatAgent(params: {
         }
 
         const result = { matches: results.slice(0, 20) };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "searchProject", args: { query }, result, status: "completed" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "searchProject", args: { query }, result, status: "completed" } });
         return result;
       } catch (error: any) {
         const result = { error: error.message };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "searchProject", args: { query }, result, status: "error" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "searchProject", args: { query }, result, status: "error" } });
         return result;
       }
     },
@@ -193,10 +203,20 @@ export async function streamChatAgent(params: {
       directory: z.string().describe("Directory path relative to project root"),
     }),
     execute: async ({ directory }) => {
-      onChunk({ type: "tool-call", toolCall: { id: Date.now().toString(), name: "listFiles", args: { directory }, status: "running" } });
+      const toolId = crypto.randomUUID();
+      const targetDir = directory || "."; // Default to root if undefined/empty? Or enforce? Enforce safer.
+      
+      if (typeof targetDir !== 'string') {
+        const errorMsg = "Invalid argument: directory must be a string";
+        onChunk({ type: "tool-call", toolCall: { id: toolId, name: "listFiles", args: { directory }, status: "running" } });
+         onChunk({ type: "tool-result", toolCall: { id: toolId, name: "listFiles", args: { directory }, result: { error: errorMsg }, status: "error" } });
+         return { error: errorMsg };
+      }
+
+      onChunk({ type: "tool-call", toolCall: { id: toolId, name: "listFiles", args: { directory }, status: "running" } });
       
       try {
-        const fullPath = path.join(projectPath, directory);
+        const fullPath = path.join(projectPath, targetDir);
         const entries = await fs.readdir(fullPath, { withFileTypes: true });
         
         const result = {
@@ -205,11 +225,11 @@ export async function streamChatAgent(params: {
             .map(e => ({ name: e.name, type: e.isDirectory() ? "directory" : "file" })),
         };
         
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "listFiles", args: { directory }, result, status: "completed" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "listFiles", args: { directory }, result, status: "completed" } });
         return result;
       } catch (error: any) {
         const result = { error: error.message };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "listFiles", args: { directory }, result, status: "error" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "listFiles", args: { directory }, result, status: "error" } });
         return result;
       }
     },
@@ -222,18 +242,19 @@ export async function streamChatAgent(params: {
     }),
     execute: async ({ command }) => {
       console.log(`🖥️ Executing command: ${command}`);
-      onChunk({ type: "tool-call", toolCall: { id: Date.now().toString(), name: "runCommand", args: { command }, status: "running" } });
+      const toolId = crypto.randomUUID();
+      onChunk({ type: "tool-call", toolCall: { id: toolId, name: "runCommand", args: { command }, status: "running" } });
       
       const dangerous = ["rm -rf", "sudo", "format", "mkfs", "> /dev"];
       if (dangerous.some(d => command.includes(d))) {
         const result = { success: false, error: "Command blocked for safety" };
-        onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "runCommand", args: { command }, result, status: "error" } });
+        onChunk({ type: "tool-result", toolCall: { id: toolId, name: "runCommand", args: { command }, result, status: "error" } });
         return result;
       }
       
       const { stdout, stderr, exitCode } = await executeCommand(command, projectPath);
       const result = { success: exitCode === 0, stdout: stdout.slice(0, 5000), stderr: stderr.slice(0, 1000), exitCode };
-      onChunk({ type: "tool-result", toolCall: { id: Date.now().toString(), name: "runCommand", args: { command }, result, status: exitCode === 0 ? "completed" : "error" } });
+      onChunk({ type: "tool-result", toolCall: { id: toolId, name: "runCommand", args: { command }, result, status: exitCode === 0 ? "completed" : "error" } });
       return result;
     },
   });
@@ -247,84 +268,19 @@ export async function streamChatAgent(params: {
   };
 
   try {
-    let conversationHistory: any[] = messages.map(m => ({
-      role: m.role,
-      content: m.content,
-    }));
+    // Delegate to the new Multi-Agent Orchestrator
+    console.log("🚀 handing off to Multi-Agent Orchestrator");
+    await runOrchestrator(messages[messages.length - 1].content, {
+        projectPath,
+        messages,
+        onChunk
+    });
 
-    let steps = 0;
-    while (steps < 10) {
-      steps++;
-      
-      const result = await streamText({
-        model: getModel(),
-        system: `You are an expert AI coding assistant, similar to Cursor or Windsurf.
-You can read files, modify code, search the project, and run terminal commands.
-
-<RULES>
-- Be concise and helpful
-- Explain what you're doing before using tools
-- Only modify existing files, don't create new ones unless asked
-- Use terminal commands for npm, git, etc.
-- Show your reasoning process
-</RULES>
-
-<PROJECT_PATH>
-${projectPath}
-</PROJECT_PATH>`,
-        messages: conversationHistory,
-        tools: definedTools,
-      });
-
-      let fullText = "";
-      const toolCalls: any[] = [];
-
-      for await (const chunk of result.fullStream) {
-        if (chunk.type === "text-delta") {
-          onChunk({ type: "text", content: chunk.textDelta || (chunk as any).text });
-          fullText += chunk.textDelta || (chunk as any).text;
-        } else if (chunk.type === "tool-call") {
-          toolCalls.push(chunk);
-        }
-      }
-
-      conversationHistory.push({
-        role: "assistant",
-        content: fullText,
-        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
-      });
-
-      if (toolCalls.length === 0) {
-        onChunk({ type: "done" });
-        break;
-      }
-
-      const toolResults = [];
-      for (const tc of toolCalls) {
-        const toolName = tc.toolName as keyof typeof definedTools;
-        const tool = definedTools[toolName];
-        if (tool && tool.execute) {
-          // Automatic UI chunks emission handles by tool.execute thanks to closure
-          // We pass context if needed but our tools only use args
-          // Note: Vercel AI SDK types might mismatch slightly but execute expects args
-          const result = await tool.execute(tc.args, { toolCallId: tc.toolCallId, messages: conversationHistory });
-          
-          toolResults.push({
-            toolCallId: tc.toolCallId,
-            toolName: tc.toolName,
-            result: result,
-          });
-        }
-      }
-
-      conversationHistory.push({
-        role: "tool",
-        content: toolResults,
-      });
-    }
-    
   } catch (error: any) {
-    console.error("❌ Chat agent error:", error);
-    onChunk({ type: "error", error: error.message });
+    console.error("❌ Chat Agent Error:", error);
+    onChunk({ type: "error", error: error.message || "An unexpected error occurred" });
+  } finally {
+    onChunk({ type: "done" });
   }
 }
+
