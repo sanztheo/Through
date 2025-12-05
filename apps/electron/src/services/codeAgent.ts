@@ -163,47 +163,54 @@ export async function runCodeAgent(params: {
       },
     });
 
-    const writeFileTool = tool({
-      description: "Write modified content to a file. This will create a backup first.",
+    const replaceInFileTool = tool({
+      description: "Replace a specific block of code in a file. SAFER than rewriting the whole file.",
       inputSchema: z.object({
-        filePath: z.string().describe("Relative path to the file from project root"),
-        content: z.string().describe("The complete new content for the file"),
-        explanation: z.string().describe("Brief explanation of what was changed"),
+        filePath: z.string().describe("Relative path to the file"),
+        search: z.string().describe("The EXACT existing code block to replace (must match character-for-character, including whitespace/indentation)"),
+        replace: z.string().describe("The new code block to insert"),
+        explanation: z.string().describe("Why this change is being made"),
       }),
-      execute: async ({ filePath, content, explanation }) => {
-        console.log(`✏️ Writing to: ${filePath}`);
-        console.log(`📝 Change: ${explanation}`);
+      execute: async ({ filePath, search, replace, explanation }) => {
+        console.log(`✏️ Patching: ${filePath}`);
         
         try {
           const fullPath = path.join(projectPath, filePath);
+          const content = await fs.readFile(fullPath, "utf-8");
+
+          // Normalize line endings for better matching
+          const normalizedContent = content.replace(/\r\n/g, "\n");
+          const normalizedSearch = search.replace(/\r\n/g, "\n");
+
+          if (!normalizedContent.includes(normalizedSearch)) {
+            // Try to be smart if exact match fails: check if it's an indentation issue
+            // or return a helpful error
+            console.error("❌ Search block not found in file");
+            console.log("Expected:", JSON.stringify(normalizedSearch));
+            return { 
+              success: false, 
+              error: "Original code block not found in file. Please ensure 'search' matches EXACTLY the existing code, including indentation. Use readFile to verify." 
+            };
+          }
+
           const backupPath = fullPath + ".through-backup";
-
-          // Read original content
-          let originalContent = "";
-          try {
-            originalContent = await fs.readFile(fullPath, "utf-8");
-          } catch (e) {
-            // File might not exist yet
-          }
-
+          
           // Create backup
-          if (originalContent) {
-            await fs.writeFile(backupPath, originalContent, "utf-8");
-          }
+          await fs.writeFile(backupPath, content, "utf-8");
 
-          // Write new content
-          await fs.writeFile(fullPath, content, "utf-8");
+          // Perform replacement
+          const newContent = normalizedContent.replace(normalizedSearch, replace);
+          await fs.writeFile(fullPath, newContent, "utf-8");
 
           // Store pending change info
           pendingChanges.set(backupPath, {
             originalPath: fullPath,
             backupPath,
-            originalContent,
+            originalContent: content,
           });
 
-          console.log(`✅ File modified: ${filePath}`);
+          console.log(`✅ File patched: ${filePath}`);
           
-          // Store the result for later extraction
           lastWriteResult = { 
             success: true, 
             filePath, 
@@ -213,7 +220,6 @@ export async function runCodeAgent(params: {
           
           return lastWriteResult;
         } catch (error: any) {
-          console.error(`❌ Write failed: ${error.message}`);
           return { error: error.message };
         }
       },
@@ -281,8 +287,8 @@ ${elementContext}
 
 <WORKFLOW>
 ${directFilePath ? `1. 🚨 IMMEDIATE ACTION: The user selected a React component at "${directFilePath}". READ THIS FILE FIRST.` : `1. Use searchInProject to find the element by its ID, classes, or text content`}
-${directFilePath ? `2. Modify this file directly to implement the request.` : `2. Read the found file to understand its structure`}
-${directFilePath ? `3. Only search elsewhere if strictly necessary.` : `3. Modify ONLY that existing file - do not create new files`}
+${directFilePath ? `2. Modify this file directly using replaceInFile.` : `2. Read the found file to understand its structure`}
+${directFilePath ? `3. Only search elsewhere if strictly necessary.` : `3. Modify ONLY that existing file using replaceInFile - NEVER rewrite the whole file`}
 4. If styling needed, find existing CSS/SCSS files and modify those
 </WORKFLOW>
 
@@ -295,16 +301,16 @@ ${directFilePath ? `3. Only search elsewhere if strictly necessary.` : `3. Modif
 </STYLING_RULES>
 
 <OUTPUT_RULES>
-- Make minimal, targeted changes
-- Preserve existing code structure exactly
-- Only change what's necessary for the user's request
-- Keep the same file format and coding style
+- Use replaceInFile for SURGICAL updates
+- Provide the EXACT original code in 'search' (copy-paste from readFile input)
+- Keep indentation consistent
+- Only change what's absolutely necessary
 </OUTPUT_RULES>`,
       prompt: userPrompt,
       tools: {
         searchInProject: searchInProjectTool,
         readFile: readFileTool,
-        writeFile: writeFileTool,
+        replaceInFile: replaceInFileTool,
         listFiles: listFilesTool,
       },
     });
