@@ -271,7 +271,7 @@ export async function runCodeAgent(params: {
 
     const result = await generateText({
       model: getModel(),
-      stopWhen: stepCountIs(10),
+      stopWhen: stepCountIs(25),
       system: `You are an EXPERT frontend developer specialized in modifying EXISTING code.
 
 ELEMENT CONTEXT:
