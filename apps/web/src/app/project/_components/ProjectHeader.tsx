@@ -41,8 +41,6 @@ interface ProjectHeaderProps {
   onReload: () => void;
   onToggleTerminal: () => void;
   onToggleInspector: () => void;
-  onToggleChat: () => void;
-  isChatOpen?: boolean;
   pendingModificationsCount?: number;
 }
 
@@ -71,8 +69,6 @@ export function ProjectHeader({
   onReload,
   onToggleTerminal,
   onToggleInspector,
-  onToggleChat,
-  isChatOpen = false,
   pendingModificationsCount = 0,
 }: ProjectHeaderProps) {
   const anyServerRunning = servers.some((s) => s.status === "running");
@@ -328,17 +324,6 @@ export function ProjectHeader({
               {pendingModificationsCount}
             </span>
           )}
-        </button>
-        <button
-          onClick={onToggleChat}
-          className={`p-1.5 rounded-md transition-colors ${
-            isChatOpen
-              ? "bg-blue-100 text-blue-600"
-              : "bg-white hover:bg-gray-100 text-gray-600"
-          }`}
-          title="AI Chat"
-        >
-          <MessageSquare className="w-4 h-4" />
         </button>
         <button
           onClick={onToggleTerminal}

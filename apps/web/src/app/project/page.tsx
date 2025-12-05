@@ -13,7 +13,6 @@ import { useElementInspector } from "./_hooks/useElementInspector";
 import { useAgentModifications } from "./_hooks/useAgentModifications";
 import { ProjectHeader } from "./_components/ProjectHeader";
 import { ElementInspectorPanel } from "./_components/ElementInspectorPanel";
-import { ChatPanel } from "@/components/chat/ChatPanel";
 import { PendingModificationsList } from "./_components/PendingModificationsList";
 
 function ProjectContent() {
@@ -26,7 +25,6 @@ function ProjectContent() {
 
   const [showTerminal, setShowTerminal] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(false);
-  const [showChatPanel, setShowChatPanel] = useState(false);
   const [lastSyncRef, setLastSyncRef] = useState<HTMLElement | null>(null);
 
   // Custom hooks
@@ -92,7 +90,7 @@ function ProjectContent() {
     showTerminal,
     viewMode,
     firstRunningServer,
-    showSidebar: showInspectorPanel || showChatPanel,
+    showSidebar: showInspectorPanel,
   });
 
   // Custom toggle that opens panel if there are pending modifications
@@ -169,8 +167,6 @@ function ProjectContent() {
         onReload={handleReload}
         onToggleTerminal={() => setShowTerminal(!showTerminal)}
         onToggleInspector={handleToggleInspector}
-        onToggleChat={() => setShowChatPanel(!showChatPanel)}
-        isChatOpen={showChatPanel}
         pendingModificationsCount={modifications.length}
       />
 
@@ -268,21 +264,6 @@ function ProjectContent() {
             onClose={() => setShowInspectorPanel(false)}
           />
         )}
-
-        {/* Chat Panel */}
-        <div 
-          className={`transition-all duration-300 border-l border-gray-200 bg-white ${
-            showChatPanel ? "w-[400px]" : "w-0 overflow-hidden"
-          }`}
-        >
-          <div className="w-[400px] h-full">
-            <ChatPanel
-              projectPath={projectPath || ""}
-              isOpen={showChatPanel}
-              onClose={() => setShowChatPanel(false)}
-            />
-          </div>
-        </div>
       </div>
     </div>
   );
