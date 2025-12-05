@@ -80,14 +80,25 @@ export function useChatAgent(projectPath: string) {
             break;
           case "tool-call":
             if (chunk.toolCall) {
-              updated.toolCalls = [...(updated.toolCalls || []), chunk.toolCall];
+              // Only add if not already present (deduplicate by ID)
+              const exists = (updated.toolCalls || []).some(tc => tc.id === chunk.toolCall!.id);
+              if (!exists) {
+                updated.toolCalls = [...(updated.toolCalls || []), chunk.toolCall];
+              }
             }
             break;
           case "tool-result":
             if (chunk.toolCall) {
-              updated.toolCalls = (updated.toolCalls || []).map(tc =>
-                tc.name === chunk.toolCall!.name ? { ...tc, ...chunk.toolCall } : tc
-              );
+              // Update existing tool call by ID, or add if not found
+              const existingIndex = (updated.toolCalls || []).findIndex(tc => tc.id === chunk.toolCall!.id);
+              if (existingIndex >= 0) {
+                updated.toolCalls = (updated.toolCalls || []).map(tc =>
+                  tc.id === chunk.toolCall!.id ? { ...tc, ...chunk.toolCall } : tc
+                );
+              } else {
+                // Tool result came without a prior tool-call (edge case)
+                updated.toolCalls = [...(updated.toolCalls || []), chunk.toolCall];
+              }
             }
             break;
           case "done":

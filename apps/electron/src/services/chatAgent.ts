@@ -258,16 +258,20 @@ You have access to tools to search, read, list, and modify files.
         listFiles: listFilesTool,
       },
       onStepFinish: (step) => {
+        // Debug: log the step structure
+        console.log("📊 Step finished:", JSON.stringify(step, null, 2).slice(0, 500));
+        
         // Send tool calls to frontend
         if (step.toolCalls && step.toolCalls.length > 0) {
           for (const tc of step.toolCalls) {
             const toolCall = tc as any;
+            console.log("🔧 Tool call object:", Object.keys(toolCall));
             onChunk({
               type: "tool-call",
               toolCall: {
-                id: toolCall.toolCallId,
-                name: toolCall.toolName,
-                args: toolCall.args || {},
+                id: toolCall.toolCallId || toolCall.id || `call_${Date.now()}`,
+                name: toolCall.toolName || toolCall.name,
+                args: toolCall.args || toolCall.input || {},
                 status: "running"
               }
             });
@@ -278,12 +282,13 @@ You have access to tools to search, read, list, and modify files.
         if (step.toolResults && step.toolResults.length > 0) {
           for (const tr of step.toolResults) {
             const toolResult = tr as any;
+            console.log("📦 Tool result object:", Object.keys(toolResult));
             onChunk({
               type: "tool-result",
               toolCall: {
-                id: toolResult.toolCallId,
-                name: toolResult.toolName,
-                args: toolResult.args || {},
+                id: toolResult.toolCallId || toolResult.id || `result_${Date.now()}`,
+                name: toolResult.toolName || toolResult.name,
+                args: toolResult.args || toolResult.input || {},
                 result: toolResult.result,
                 status: "completed"
               }

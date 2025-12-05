@@ -18,7 +18,9 @@ interface ToolCallCardProps {
 const TOOL_ICONS: Record<string, React.ReactNode> = {
   readFile: <FileText className="w-4 h-4" />,
   writeFile: <Edit className="w-4 h-4" />,
+  replaceInFile: <Edit className="w-4 h-4" />,
   searchProject: <Search className="w-4 h-4" />,
+  searchInProject: <Search className="w-4 h-4" />,
   listFiles: <FolderOpen className="w-4 h-4" />,
   runCommand: <Terminal className="w-4 h-4" />,
 };
@@ -26,7 +28,9 @@ const TOOL_ICONS: Record<string, React.ReactNode> = {
 const TOOL_LABELS: Record<string, string> = {
   readFile: "Reading file",
   writeFile: "Writing file",
+  replaceInFile: "Editing file",
   searchProject: "Searching",
+  searchInProject: "Searching project",
   listFiles: "Listing files",
   runCommand: "Running command",
 };
