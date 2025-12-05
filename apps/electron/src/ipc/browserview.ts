@@ -88,6 +88,23 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
         view.webContents.on(
           "console-message",
           (event, level, message, line, sourceId) => {
+            // Intercept inspector messages
+            if (message.startsWith("__THROUGH_ELEMENT_SELECTED__")) {
+              try {
+                const jsonStr = message.replace("__THROUGH_ELEMENT_SELECTED__", "");
+                const elementInfo = JSON.parse(jsonStr);
+                mainWindow.webContents.send("inspector:element-selected", elementInfo);
+              } catch (e) {
+                console.error("Failed to parse element info:", e);
+              }
+              return; // Don't forward this to console logs
+            }
+
+            if (message === "__THROUGH_INSPECTOR_CANCELLED__") {
+              mainWindow.webContents.send("inspector:cancelled");
+              return; // Don't forward this to console logs
+            }
+
             const logType =
               level === 2
                 ? "error"
@@ -496,6 +513,23 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
         view.webContents.on(
           "console-message",
           (event, level, message, line, sourceId) => {
+            // Intercept inspector messages
+            if (message.startsWith("__THROUGH_ELEMENT_SELECTED__")) {
+              try {
+                const jsonStr = message.replace("__THROUGH_ELEMENT_SELECTED__", "");
+                const elementInfo = JSON.parse(jsonStr);
+                mainWindow.webContents.send("inspector:element-selected", elementInfo);
+              } catch (e) {
+                console.error("Failed to parse element info:", e);
+              }
+              return;
+            }
+
+            if (message === "__THROUGH_INSPECTOR_CANCELLED__") {
+              mainWindow.webContents.send("inspector:cancelled");
+              return;
+            }
+
             const logType =
               level === 2
                 ? "error"
@@ -538,6 +572,236 @@ export function registerBrowserViewHandlers(mainWindow: BrowserWindow) {
       }
     },
   );
+
+  // Track inspector state per tab
+  let inspectorEnabled = false;
+
+  // Element Inspector - Toggle inspector mode
+  ipcMain.handle("browserview:toggle-inspector", async (event, enabled: boolean) => {
+    try {
+      if (!activeTabId) {
+        throw new Error("No active tab");
+      }
+
+      const tab = browserTabs.get(activeTabId);
+      if (!tab) {
+        throw new Error("Active tab not found");
+      }
+
+      inspectorEnabled = enabled;
+
+      if (enabled) {
+        // Inject the element picker script
+        const inspectorScript = `
+          (function() {
+            // Prevent double injection
+            if (window.__throughInspector) {
+              window.__throughInspector.startPicking();
+              return;
+            }
+
+            // Create overlay element
+            const overlay = document.createElement('div');
+            overlay.id = '__through_inspector_overlay__';
+            overlay.style.cssText = \`
+              position: fixed;
+              pointer-events: none;
+              background: rgba(59, 130, 246, 0.15);
+              border: 2px solid rgb(59, 130, 246);
+              border-radius: 4px;
+              z-index: 2147483647;
+              transition: all 0.05s ease-out;
+              display: none;
+            \`;
+            document.body.appendChild(overlay);
+
+            // Create tooltip element
+            const tooltip = document.createElement('div');
+            tooltip.id = '__through_inspector_tooltip__';
+            tooltip.style.cssText = \`
+              position: fixed;
+              background: #1e293b;
+              color: white;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+              font-size: 11px;
+              z-index: 2147483647;
+              pointer-events: none;
+              display: none;
+              max-width: 300px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            \`;
+            document.body.appendChild(tooltip);
+
+            let currentElement = null;
+            let isPicking = true;
+
+            function getElementInfo(el) {
+              const rect = el.getBoundingClientRect();
+              const computedStyle = window.getComputedStyle(el);
+              
+              // Get element selector
+              let selector = el.tagName.toLowerCase();
+              if (el.id) selector += '#' + el.id;
+              if (el.className && typeof el.className === 'string') {
+                selector += '.' + el.className.trim().split(/\\s+/).join('.');
+              }
+
+              return {
+                tagName: el.tagName.toLowerCase(),
+                id: el.id || null,
+                className: el.className || null,
+                selector: selector,
+                rect: {
+                  x: rect.x,
+                  y: rect.y,
+                  width: rect.width,
+                  height: rect.height,
+                  top: rect.top,
+                  left: rect.left,
+                  right: rect.right,
+                  bottom: rect.bottom
+                },
+                computedStyle: {
+                  display: computedStyle.display,
+                  position: computedStyle.position,
+                  color: computedStyle.color,
+                  backgroundColor: computedStyle.backgroundColor,
+                  fontSize: computedStyle.fontSize,
+                  fontFamily: computedStyle.fontFamily,
+                  padding: computedStyle.padding,
+                  margin: computedStyle.margin,
+                  border: computedStyle.border,
+                  borderRadius: computedStyle.borderRadius,
+                  width: computedStyle.width,
+                  height: computedStyle.height,
+                  boxSizing: computedStyle.boxSizing,
+                },
+                attributes: Array.from(el.attributes).map(a => ({ name: a.name, value: a.value })),
+                textContent: el.textContent?.substring(0, 100) || null,
+                childCount: el.children.length,
+                parentTag: el.parentElement?.tagName.toLowerCase() || null
+              };
+            }
+
+            function updateOverlay(el) {
+              if (!el || el === document.body || el === document.documentElement) {
+                overlay.style.display = 'none';
+                tooltip.style.display = 'none';
+                return;
+              }
+
+              const rect = el.getBoundingClientRect();
+              overlay.style.display = 'block';
+              overlay.style.left = rect.left + 'px';
+              overlay.style.top = rect.top + 'px';
+              overlay.style.width = rect.width + 'px';
+              overlay.style.height = rect.height + 'px';
+
+              // Update tooltip
+              let label = el.tagName.toLowerCase();
+              if (el.id) label += '#' + el.id;
+              if (el.className && typeof el.className === 'string') {
+                const classes = el.className.trim().split(/\\s+/).slice(0, 2).join('.');
+                if (classes) label += '.' + classes;
+              }
+              
+              tooltip.textContent = label + ' | ' + Math.round(rect.width) + ' × ' + Math.round(rect.height);
+              tooltip.style.display = 'block';
+              
+              // Position tooltip
+              let tooltipTop = rect.top - 28;
+              if (tooltipTop < 4) tooltipTop = rect.bottom + 4;
+              tooltip.style.left = Math.max(4, rect.left) + 'px';
+              tooltip.style.top = tooltipTop + 'px';
+            }
+
+            function handleMouseMove(e) {
+              if (!isPicking) return;
+              const el = document.elementFromPoint(e.clientX, e.clientY);
+              if (el && el !== overlay && el !== tooltip && el !== currentElement) {
+                currentElement = el;
+                updateOverlay(el);
+              }
+            }
+
+            function handleClick(e) {
+              if (!isPicking) return;
+              e.preventDefault();
+              e.stopPropagation();
+              
+              const el = document.elementFromPoint(e.clientX, e.clientY);
+              if (el && el !== overlay && el !== tooltip) {
+                const info = getElementInfo(el);
+                // Send to Electron via console (we'll intercept this)
+                console.log('__THROUGH_ELEMENT_SELECTED__' + JSON.stringify(info));
+              }
+            }
+
+            function handleKeyDown(e) {
+              if (e.key === 'Escape') {
+                stopPicking();
+                console.log('__THROUGH_INSPECTOR_CANCELLED__');
+              }
+            }
+
+            function startPicking() {
+              isPicking = true;
+              document.body.style.cursor = 'crosshair';
+              document.addEventListener('mousemove', handleMouseMove, true);
+              document.addEventListener('click', handleClick, true);
+              document.addEventListener('keydown', handleKeyDown, true);
+            }
+
+            function stopPicking() {
+              isPicking = false;
+              document.body.style.cursor = '';
+              overlay.style.display = 'none';
+              tooltip.style.display = 'none';
+              document.removeEventListener('mousemove', handleMouseMove, true);
+              document.removeEventListener('click', handleClick, true);
+              document.removeEventListener('keydown', handleKeyDown, true);
+            }
+
+            function destroy() {
+              stopPicking();
+              overlay.remove();
+              tooltip.remove();
+              delete window.__throughInspector;
+            }
+
+            window.__throughInspector = {
+              startPicking,
+              stopPicking,
+              destroy
+            };
+
+            startPicking();
+          })();
+        `;
+        
+        await tab.view.webContents.executeJavaScript(inspectorScript);
+        console.log("🔍 Element inspector enabled");
+      } else {
+        // Disable the inspector
+        await tab.view.webContents.executeJavaScript(`
+          if (window.__throughInspector) {
+            window.__throughInspector.destroy();
+          }
+        `);
+        console.log("🔍 Element inspector disabled");
+      }
+
+      return { success: true, enabled };
+    } catch (error: any) {
+      console.error("❌ Failed to toggle inspector:", error);
+      throw new Error(`Failed to toggle inspector: ${error.message}`);
+    }
+  });
 
   console.log("✅ BrowserView IPC handlers registered");
 }

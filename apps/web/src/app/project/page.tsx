@@ -9,7 +9,9 @@ import { CodeEditorPanel } from "@/components/editor";
 import { useProjectServers } from "./_hooks/useProjectServers";
 import { useBrowserView } from "./_hooks/useBrowserView";
 import { useEditor } from "./_hooks/useEditor";
+import { useElementInspector } from "./_hooks/useElementInspector";
 import { ProjectHeader } from "./_components/ProjectHeader";
+import { ElementInspectorPanel } from "./_components/ElementInspectorPanel";
 
 function ProjectContent() {
   const router = useRouter();
@@ -68,6 +70,14 @@ function ProjectContent() {
     firstRunningServer,
   });
 
+  // Element Inspector
+  const {
+    isInspecting,
+    selectedElement,
+    toggleInspector,
+    clearSelection,
+  } = useElementInspector({ api });
+
   // Handle back navigation
   const handleBackToHome = useCallback(async () => {
     console.log("🏠 Returning to home - stopping all servers...");
@@ -107,6 +117,7 @@ function ProjectContent() {
         canGoBack={canGoBack}
         canGoForward={canGoForward}
         showTerminal={showTerminal}
+        isInspecting={isInspecting}
         onBackToHome={handleBackToHome}
         onTabClick={(tabId) => {
           handleTabClick(tabId);
@@ -124,6 +135,7 @@ function ProjectContent() {
         onGoForward={handleGoForward}
         onReload={handleReload}
         onToggleTerminal={() => setShowTerminal(!showTerminal)}
+        onToggleInspector={toggleInspector}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -205,6 +217,14 @@ function ProjectContent() {
               onSave={handleEditorSave}
             />
           </div>
+        )}
+
+        {/* Element Inspector Panel */}
+        {selectedElement && (
+          <ElementInspectorPanel
+            element={selectedElement}
+            onClose={clearSelection}
+          />
         )}
       </div>
     </div>

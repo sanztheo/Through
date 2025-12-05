@@ -1,5 +1,5 @@
 import React from "react";
-import { Terminal, X } from "lucide-react";
+import { Terminal, X, MousePointerClick } from "lucide-react";
 import { ServerInstance } from "../_types";
 import { EditorTab } from "@/components/editor";
 
@@ -15,6 +15,7 @@ interface ProjectHeaderProps {
   canGoBack: boolean;
   canGoForward: boolean;
   showTerminal: boolean;
+  isInspecting: boolean;
   onBackToHome: () => void;
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
@@ -26,6 +27,7 @@ interface ProjectHeaderProps {
   onGoForward: () => void;
   onReload: () => void;
   onToggleTerminal: () => void;
+  onToggleInspector: () => void;
 }
 
 export function ProjectHeader({
@@ -40,6 +42,7 @@ export function ProjectHeader({
   canGoBack,
   canGoForward,
   showTerminal,
+  isInspecting,
   onBackToHome,
   onTabClick,
   onTabClose,
@@ -51,6 +54,7 @@ export function ProjectHeader({
   onGoForward,
   onReload,
   onToggleTerminal,
+  onToggleInspector,
 }: ProjectHeaderProps) {
   const anyServerRunning = servers.some((s) => s.status === "running");
 
@@ -290,6 +294,17 @@ export function ProjectHeader({
                   : "Idle"}
           </span>
         </div>
+        <button
+          onClick={onToggleInspector}
+          className={`p-1.5 rounded-md transition-colors ${
+            isInspecting
+              ? "bg-blue-100 text-blue-600"
+              : "bg-white hover:bg-gray-100 text-gray-600"
+          }`}
+          title="Inspect Element"
+        >
+          <MousePointerClick className="w-4 h-4" />
+        </button>
         <button
           onClick={onToggleTerminal}
           className={`p-1.5 rounded-md transition-colors ${

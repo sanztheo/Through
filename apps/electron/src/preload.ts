@@ -113,6 +113,42 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("fs:write-file", { filePath, content }),
   exists: (filePath: string) => ipcRenderer.invoke("fs:exists", filePath),
   readDir: (dirPath: string) => ipcRenderer.invoke("fs:read-dir", dirPath),
+
+  // Element Inspector
+  toggleInspector: (enabled: boolean) =>
+    ipcRenderer.invoke("browserview:toggle-inspector", enabled),
+  onElementSelected: (
+    callback: (elementInfo: {
+      tagName: string;
+      id: string | null;
+      className: string | null;
+      selector: string;
+      rect: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        top: number;
+        left: number;
+        right: number;
+        bottom: number;
+      };
+      computedStyle: Record<string, string>;
+      attributes: Array<{ name: string; value: string }>;
+      textContent: string | null;
+      childCount: number;
+      parentTag: string | null;
+    }) => void,
+  ) => {
+    ipcRenderer.on("inspector:element-selected", (_, elementInfo) => {
+      callback(elementInfo);
+    });
+  },
+  onInspectorCancelled: (callback: () => void) => {
+    ipcRenderer.on("inspector:cancelled", () => {
+      callback();
+    });
+  },
 });
 
 console.log("Preload script loaded");
