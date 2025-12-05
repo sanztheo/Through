@@ -170,6 +170,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSettings: () => ipcRenderer.invoke("settings:get"),
   setSettings: (settings: { aiModel?: string }) =>
     ipcRenderer.invoke("settings:set", settings),
+
+  // Chat Agent
+  streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) =>
+    ipcRenderer.invoke("chat:stream", { projectPath, messages }),
+  onChatChunk: (callback: (chunk: any) => void) => {
+    ipcRenderer.on("chat:chunk", (_, chunk) => callback(chunk));
+    return () => ipcRenderer.removeAllListeners("chat:chunk");
+  },
 });
 
 console.log("Preload script loaded");

@@ -124,6 +124,42 @@ export interface ElectronAPI {
   readDir: (
     dirPath: string,
   ) => Promise<{ success: boolean; files?: string[]; error?: string }>;
+  // Element Inspector
+  toggleInspector: (enabled: boolean) => Promise<void>;
+  inspectElement: (
+    selector: string,
+  ) => Promise<{
+    matched: boolean;
+    info?: {
+      tag: string;
+      id: string;
+      className: string;
+      attributes: Record<string, string>;
+      rect: { x: number; y: number; width: number; height: number };
+      computedStyle: Record<string, string>;
+      selector: string;
+      innerHTML?: string;
+    };
+  }>;
+  highlightElement: (selector: string) => Promise<boolean>;
+  modifyElement: (selector: string, modifications: any) => Promise<boolean>;
+  onElementSelected: (callback: (data: any) => void) => void;
+
+  // Agent
+  runAgent: (
+    prompt: string,
+    context: any,
+  ) => Promise<{ success: boolean; message: string; data?: any }>;
+  acceptAgentChange: (backupPath: string) => Promise<{ success: boolean }>;
+  rejectAgentChange: (backupPath: string) => Promise<{ success: boolean }>;
+
+  // Settings
+  getSettings: () => Promise<{ settings: any; models: any[] }>;
+  setSettings: (settings: { aiModel?: string }) => Promise<void>;
+
+  // Chat
+  streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<void>;
+  onChatChunk: (callback: (chunk: any) => void) => () => void;
 }
 
 declare global {

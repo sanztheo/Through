@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 import { TerminalPanel } from "@/components/terminal";
@@ -13,6 +13,8 @@ import { useElementInspector } from "./_hooks/useElementInspector";
 import { useAgentModifications } from "./_hooks/useAgentModifications";
 import { ProjectHeader } from "./_components/ProjectHeader";
 import { ElementInspectorPanel } from "./_components/ElementInspectorPanel";
+import { ChatPanel } from "@/components/chat/ChatPanel";
+import { PendingModificationsList } from "./_components/PendingModificationsList";
 
 function ProjectContent() {
   const router = useRouter();
@@ -22,8 +24,10 @@ function ProjectContent() {
   const autoStartParam = searchParams.get("autoStart");
   const { api } = useElectronAPI();
 
-  const [showTerminal, setShowTerminal] = useState(false);
+  const [showTerminal, setShowTerminal] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(false);
+  const [showChatPanel, setShowChatPanel] = useState(false);
+  const [lastSyncRef, setLastSyncRef] = useState<HTMLElement | null>(null);
 
   // Custom hooks
   const {
@@ -88,7 +92,7 @@ function ProjectContent() {
     showTerminal,
     viewMode,
     firstRunningServer,
-    showSidebar: showInspectorPanel || !!selectedElement,
+    showSidebar: showInspectorPanel || showChatPanel,
   });
 
   // Custom toggle that opens panel if there are pending modifications
@@ -165,6 +169,8 @@ function ProjectContent() {
         onReload={handleReload}
         onToggleTerminal={() => setShowTerminal(!showTerminal)}
         onToggleInspector={handleToggleInspector}
+        onToggleChat={() => setShowChatPanel(!showChatPanel)}
+        isChatOpen={showChatPanel}
         pendingModificationsCount={modifications.length}
       />
 
@@ -259,9 +265,24 @@ function ProjectContent() {
             onAcceptModification={acceptModification}
             onRejectModification={rejectModification}
             onDismissModification={dismissModification}
-            onClose={handleCloseInspectorPanel}
+            onClose={() => setShowInspectorPanel(false)}
           />
         )}
+
+        {/* Chat Panel */}
+        <div 
+          className={`transition-all duration-300 border-l border-gray-200 bg-white ${
+            showChatPanel ? "w-[400px]" : "w-0 overflow-hidden"
+          }`}
+        >
+          <div className="w-[400px] h-full">
+            <ChatPanel
+              projectPath={projectPath || ""}
+              isOpen={showChatPanel}
+              onClose={() => setShowChatPanel(false)}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );

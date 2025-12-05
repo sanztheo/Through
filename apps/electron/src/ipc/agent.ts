@@ -1,6 +1,7 @@
-import { ipcMain } from "electron";
+import { ipcMain, BrowserWindow } from "electron";
 import { runCodeAgent, acceptChange, rejectChange, ElementInfo } from "../services/codeAgent.js";
 import { getSettings, saveSettings, AI_MODELS } from "../services/settings.js";
+import { streamChatAgent, ChatMessage } from "../services/chatAgent.js";
 
 export function registerAgentHandlers() {
   console.log("Registering Agent IPC handlers...");
@@ -62,6 +63,40 @@ export function registerAgentHandlers() {
   ipcMain.handle("settings:set", async (event, settings: { aiModel?: string }) => {
     return saveSettings(settings);
   });
+
+  // Chat agent streaming
+  ipcMain.handle(
+    "chat:stream",
+    async (
+      event,
+      data: {
+        projectPath: string;
+        messages: ChatMessage[];
+      }
+    ) => {
+      console.log("💬 IPC: Starting chat stream...");
+      
+      const window = BrowserWindow.fromWebContents(event.sender);
+      
+      try {
+        await streamChatAgent({
+          projectPath: data.projectPath,
+          messages: data.messages,
+          onChunk: (chunk) => {
+            // Send chunk to renderer via event
+            if (window && !window.isDestroyed()) {
+              window.webContents.send("chat:chunk", chunk);
+            }
+          },
+        });
+        
+        return { success: true };
+      } catch (error: any) {
+        console.error("❌ Chat IPC error:", error);
+        return { success: false, error: error.message };
+      }
+    }
+  );
 
   console.log("✅ Agent IPC handlers registered");
 }
