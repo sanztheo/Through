@@ -3,12 +3,19 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useElectronAPI } from "@/hooks/useElectronAPI";
 
+// A segment can be either text or a tool call
+export interface MessageSegment {
+  type: "text" | "tool";
+  content?: string;
+  toolCall?: ToolCall;
+}
+
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
-  content: string;
+  content: string;  // Full text for user messages, empty for assistant (use segments)
   isStreaming?: boolean;
-  toolCalls?: ToolCall[];
+  segments?: MessageSegment[];  // Ordered list of text and tool segments
 }
 
 export interface ToolCall {
@@ -20,9 +27,10 @@ export interface ToolCall {
 }
 
 interface StreamChunk {
-  type: "text" | "tool-call" | "tool-result" | "done" | "error";
+  type: "text" | "tool-call" | "tool-result" | "step" | "done" | "error";
   content?: string;
   toolCall?: ToolCall;
+  stepNumber?: number;
   error?: string;
 }
 
@@ -31,9 +39,9 @@ export function useChatAgent(projectPath: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentStep, setCurrentStep] = useState(0);
   const cleanupRef = useRef<(() => void) | null>(null);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (cleanupRef.current) {
@@ -47,69 +55,86 @@ export function useChatAgent(projectPath: string) {
 
     setError(null);
     setIsStreaming(true);
+    setCurrentStep(0);
 
-    // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: "user",
       content,
     };
 
-    // Add placeholder assistant message
     const assistantMessage: ChatMessage = {
       id: (Date.now() + 1).toString(),
       role: "assistant",
       content: "",
       isStreaming: true,
-      toolCalls: [],
+      segments: [],
     };
 
     setMessages(prev => [...prev, userMessage, assistantMessage]);
 
-    // Setup chunk listener
     const cleanup = api.onChatChunk((chunk: StreamChunk) => {
       setMessages(prev => {
         const lastMessage = prev[prev.length - 1];
         if (lastMessage.role !== "assistant") return prev;
 
         const updated = { ...lastMessage };
+        const segments = [...(updated.segments || [])];
 
         switch (chunk.type) {
           case "text":
-            updated.content += chunk.content || "";
+            if (chunk.content) {
+              // Find last text segment or create new one
+              const lastSegment = segments[segments.length - 1];
+              if (lastSegment && lastSegment.type === "text") {
+                lastSegment.content = (lastSegment.content || "") + chunk.content;
+              } else {
+                segments.push({ type: "text", content: chunk.content });
+              }
+              updated.content += chunk.content;
+            }
             break;
+
           case "tool-call":
             if (chunk.toolCall) {
-              // Only add if not already present (deduplicate by ID)
-              const exists = (updated.toolCalls || []).some(tc => tc.id === chunk.toolCall!.id);
-              if (!exists) {
-                updated.toolCalls = [...(updated.toolCalls || []), chunk.toolCall];
-              }
+              // Add tool as new segment
+              segments.push({ 
+                type: "tool", 
+                toolCall: { ...chunk.toolCall, status: "running" }
+              });
             }
             break;
+
           case "tool-result":
             if (chunk.toolCall) {
-              // Update existing tool call by ID, or add if not found
-              const existingIndex = (updated.toolCalls || []).findIndex(tc => tc.id === chunk.toolCall!.id);
-              if (existingIndex >= 0) {
-                updated.toolCalls = (updated.toolCalls || []).map(tc =>
-                  tc.id === chunk.toolCall!.id ? { ...tc, ...chunk.toolCall } : tc
-                );
-              } else {
-                // Tool result came without a prior tool-call (edge case)
-                updated.toolCalls = [...(updated.toolCalls || []), chunk.toolCall];
+              // Find and update the tool segment
+              for (let i = segments.length - 1; i >= 0; i--) {
+                const seg = segments[i];
+                if (seg.type === "tool" && seg.toolCall?.name === chunk.toolCall.name) {
+                  seg.toolCall = { ...seg.toolCall, ...chunk.toolCall, status: "completed" };
+                  break;
+                }
               }
             }
             break;
+
+          case "step":
+            if (chunk.stepNumber) {
+              setCurrentStep(chunk.stepNumber);
+            }
+            break;
+
           case "done":
             updated.isStreaming = false;
             break;
+
           case "error":
             updated.isStreaming = false;
             setError(chunk.error || "An error occurred");
             break;
         }
 
+        updated.segments = segments;
         return [...prev.slice(0, -1), updated];
       });
 
@@ -120,7 +145,6 @@ export function useChatAgent(projectPath: string) {
 
     cleanupRef.current = cleanup;
 
-    // Prepare messages for API (exclude streaming state)
     const apiMessages = [...messages, userMessage].map(m => ({
       role: m.role,
       content: m.content,
@@ -137,12 +161,14 @@ export function useChatAgent(projectPath: string) {
   const clearMessages = useCallback(() => {
     setMessages([]);
     setError(null);
+    setCurrentStep(0);
   }, []);
 
   return {
     messages,
     isStreaming,
     error,
+    currentStep,
     sendMessage,
     clearMessages,
   };

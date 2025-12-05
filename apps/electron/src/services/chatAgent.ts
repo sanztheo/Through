@@ -189,9 +189,21 @@ function createCodingAgent(
         replace: z.string().describe("New code to insert"),
         explanation: z.string().describe("Brief explanation of the change"),
       }),
-      execute: async ({ filePath, search, replace, explanation }) => {
+      execute: async (args) => {
+        // Debug: log raw args
+        console.log("🔧 replaceInFile received args:", JSON.stringify(args, null, 2).slice(0, 500));
+        
+        const { filePath, search, replace, explanation } = args as any;
+        
+        if (!filePath || !search || !replace) {
+          console.error("❌ Missing required args!", { filePath: !!filePath, search: !!search, replace: !!replace });
+          return { success: false, error: "Missing required arguments (filePath, search, or replace)" };
+        }
+        
         console.log(`✏️ Editing: ${filePath}`);
-        console.log(`   ${explanation}`);
+        console.log(`   Explanation: ${explanation}`);
+        console.log(`   Search length: ${search?.length || 0}`);
+        console.log(`   Replace length: ${replace?.length || 0}`);
         onToolCall?.("replaceInFile", { filePath, explanation });
         
         try {
@@ -203,6 +215,7 @@ function createCodingAgent(
 
           if (!normalizedContent.includes(normalizedSearch)) {
             console.error("❌ Search block not found!");
+            console.log("   Expected:", JSON.stringify(normalizedSearch.slice(0, 200)));
             return { 
               success: false, 
               error: "Search block not found. Copy the EXACT text from readFile, including all whitespace and indentation." 
@@ -216,6 +229,7 @@ function createCodingAgent(
           onToolResult?.("replaceInFile", { success: true, filePath });
           return { success: true, filePath, explanation };
         } catch (error: any) {
+          console.error("❌ Error:", error.message);
           return { error: error.message };
         }
       },

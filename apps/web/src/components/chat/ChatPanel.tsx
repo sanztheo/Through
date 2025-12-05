@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { Send, X, Trash2, Loader2, Bot, User } from "lucide-react";
-import { useChatAgent, ChatMessage } from "@/app/project/_hooks/useChatAgent";
+import { Send, X, Trash2, Loader2, Bot, User, Zap } from "lucide-react";
+import { useChatAgent, ChatMessage, MessageSegment } from "@/app/project/_hooks/useChatAgent";
 import { ToolCallCard } from "./ToolCallCard";
 import { MarkdownContent } from "./MarkdownContent";
 
@@ -16,29 +16,26 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
-  const { messages, isStreaming, error, sendMessage, clearMessages } = useChatAgent(projectPath);
+  const { messages, isStreaming, error, currentStep, sendMessage, clearMessages } = useChatAgent(projectPath);
   const files = useProjectFiles(projectPath);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   
-  // Mention state
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [mentionIndex, setMentionIndex] = useState(0);
   const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
 
-  // Scroll to bottom on new messages
+  // Auto-scroll on new content
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  }, [messages, isStreaming]);
 
-  // Handle input change for mentions
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setInput(value);
 
-    // Check for @ mention
     const lastAt = value.lastIndexOf("@");
     if (lastAt !== -1 && lastAt >= value.lastIndexOf(" ")) {
       const query = value.slice(lastAt + 1);
@@ -47,7 +44,7 @@ export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
       
       const filtered = files
         .filter(f => f.toLowerCase().includes(query.toLowerCase()))
-        .slice(0, 10); // Limit results
+        .slice(0, 10);
       setFilteredFiles(filtered);
       setMentionIndex(0);
     } else {
@@ -58,7 +55,7 @@ export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
   const insertMention = (file: string) => {
     const lastAt = input.lastIndexOf("@");
     if (lastAt !== -1) {
-      const newValue = input.slice(0, lastAt) + file + " " + input.slice(input.length);
+      const newValue = input.slice(0, lastAt) + file + " ";
       setInput(newValue);
       setShowMentions(false);
       inputRef.current?.focus();
@@ -98,7 +95,13 @@ export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gray-50">
         <div className="flex items-center gap-2">
           <Bot className="w-5 h-5 text-blue-500" />
-          <span className="font-medium text-gray-900">AI Assistant</span>
+          <span className="font-medium text-gray-900">Through Agent</span>
+          {isStreaming && currentStep > 0 && (
+            <span className="flex items-center gap-1 text-xs text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+              <Zap className="w-3 h-3" />
+              Step {currentStep}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <button
@@ -167,7 +170,7 @@ export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Ask me anything... (Type @ to add file)"
+            placeholder="Ask me anything... (Type @ to mention file)"
             disabled={isStreaming}
             className="flex-1 px-4 py-2 bg-white text-gray-900 placeholder:text-gray-500 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-100"
           />
@@ -188,56 +191,72 @@ export function ChatPanel({ projectPath, isOpen, onClose }: ChatPanelProps) {
   );
 }
 
+// Message bubble that renders segments (text + tools) in order
 function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
 
-  return (
-    <div className={`flex gap-3 ${isUser ? "justify-end" : ""}`}>
-      {!isUser && (
-        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-          <Bot className="w-4 h-4 text-blue-600" />
-        </div>
-      )}
-
-      <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
-        <div
-          className={`rounded-lg px-4 py-2 ${
-            isUser
-              ? "bg-blue-500 text-white"
-              : "bg-gray-100 text-gray-900"
-          }`}
-        >
-          {message.content ? (
-            isUser ? (
-              message.content
-            ) : (
-              <MarkdownContent content={message.content} />
-            )
-          ) : (
-            message.isStreaming && (
-              <span className="flex items-center gap-2 text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Thinking...
-              </span>
-            )
-          )}
-        </div>
-
-        {/* Tool calls */}
-        {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2">
-            {message.toolCalls.map((tc) => (
-              <ToolCallCard key={tc.id} toolCall={tc} />
-            ))}
+  // For user messages, just show content
+  if (isUser) {
+    return (
+      <div className="flex gap-3 justify-end">
+        <div className="max-w-[80%]">
+          <div className="rounded-lg px-4 py-2 bg-blue-500 text-white">
+            {message.content}
           </div>
-        )}
-      </div>
-
-      {isUser && (
+        </div>
         <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
           <User className="w-4 h-4 text-gray-600" />
         </div>
-      )}
+      </div>
+    );
+  }
+
+  // For assistant messages, render segments in order
+  const segments = message.segments || [];
+  const hasContent = segments.length > 0 || message.isStreaming;
+
+  return (
+    <div className="flex gap-3">
+      <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
+        <Bot className="w-4 h-4 text-blue-600" />
+      </div>
+
+      <div className="flex-1 max-w-[85%] space-y-2">
+        {/* Show thinking indicator if streaming and no segments yet */}
+        {message.isStreaming && segments.length === 0 && (
+          <div className="rounded-lg px-4 py-2 bg-gray-100 text-gray-900">
+            <span className="flex items-center gap-2 text-gray-400">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Thinking...
+            </span>
+          </div>
+        )}
+
+        {/* Render each segment in order */}
+        {segments.map((segment, idx) => (
+          <SegmentRenderer key={idx} segment={segment} isLast={idx === segments.length - 1 && !!message.isStreaming} />
+        ))}
+      </div>
     </div>
   );
+}
+
+// Render a single segment (text or tool)
+function SegmentRenderer({ segment, isLast }: { segment: MessageSegment; isLast: boolean }) {
+  if (segment.type === "text" && segment.content) {
+    return (
+      <div className="rounded-lg px-4 py-2 bg-gray-100 text-gray-900">
+        <MarkdownContent content={segment.content} />
+        {isLast && (
+          <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
+        )}
+      </div>
+    );
+  }
+
+  if (segment.type === "tool" && segment.toolCall) {
+    return <ToolCallCard toolCall={segment.toolCall} />;
+  }
+
+  return null;
 }
