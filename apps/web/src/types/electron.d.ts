@@ -124,6 +124,13 @@ export interface ElectronAPI {
   readDir: (
     dirPath: string,
   ) => Promise<{ success: boolean; files?: string[]; error?: string }>;
+  renameFile: (
+    oldPath: string,
+    newPath: string,
+  ) => Promise<{ success: boolean; error?: string }>;
+  deleteFile: (
+    filePath: string,
+  ) => Promise<{ success: boolean; error?: string }>;
   // Element Inspector
   toggleInspector: (enabled: boolean) => Promise<void>;
   inspectElement: (

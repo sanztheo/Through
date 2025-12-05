@@ -113,6 +113,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("fs:write-file", { filePath, content }),
   exists: (filePath: string) => ipcRenderer.invoke("fs:exists", filePath),
   readDir: (dirPath: string) => ipcRenderer.invoke("fs:read-dir", dirPath),
+  renameFile: (oldPath: string, newPath: string) =>
+    ipcRenderer.invoke("fs:rename", { oldPath, newPath }),
+  deleteFile: (filePath: string) => ipcRenderer.invoke("fs:delete", filePath),
 
   // Element Inspector
   toggleInspector: (enabled: boolean) =>

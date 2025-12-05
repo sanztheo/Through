@@ -42,5 +42,31 @@ export function registerFilesystemHandlers() {
     }
   });
 
+  ipcMain.handle(
+    "fs:rename",
+    async (event, data: { oldPath: string; newPath: string }) => {
+      try {
+        await fs.rename(data.oldPath, data.newPath);
+        return { success: true };
+      } catch (error: any) {
+        return { success: false, error: error.message };
+      }
+    },
+  );
+
+  ipcMain.handle("fs:delete", async (event, filePath: string) => {
+    try {
+      const stat = await fs.stat(filePath);
+      if (stat.isDirectory()) {
+        await fs.rm(filePath, { recursive: true, force: true });
+      } else {
+        await fs.unlink(filePath);
+      }
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  });
+
   console.log("Filesystem IPC handlers registered");
 }
