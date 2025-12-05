@@ -13,7 +13,7 @@ export const PlanSchema = z.object({
       type: z.enum(["command", "code_change", "verification", "analysis"]).describe("Type of action required"),
     })
   ).describe("Ordered list of steps to achieve the goal"),
-});
+}).describe("The implementation plan structure");
 
 export type Plan = z.infer<typeof PlanSchema>;
 

@@ -6,7 +6,7 @@ export const VerificationSchema = z.object({
   success: z.boolean().describe("Whether the step was completed successfully"),
   feedback: z.string().describe("Critique or feedback for the executor"),
   nextAction: z.enum(["proceed", "retry", "abort"]).describe("What to do next"),
-});
+}).describe("The result of the verification step");
 
 export async function verifyStep(
     stepDescription: string,

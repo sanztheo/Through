@@ -47,7 +47,8 @@ export async function runOrchestrator(userPrompt: string, context: AgentContext)
           executionResult = await result.text;
           
           // Update history for next steps
-          history.push({ role: "system", content: `Completed step: ${step.description}. Result: ${executionResult}` });
+          // Update history for next steps
+          history.push({ role: "assistant", content: `Completed step: ${step.description}. Result: ${executionResult}` });
           
       } catch (execErr: any) {
           onChunk({ type: "text", content: `\n❌ Execution Failed: ${execErr.message}\n` });
