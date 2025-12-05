@@ -30,11 +30,14 @@ export class GitManager {
    * Clone a public repository
    */
   async cloneRepository(url: string, destPath: string): Promise<CloneResult> {
+    // Convert SSH URL to HTTPS for public repos
+    const httpsUrl = this.convertToHttps(url);
+    
     // Extract repo name from URL
-    const repoName = this.extractRepoName(url);
+    const repoName = this.extractRepoName(httpsUrl);
     const fullPath = path.join(destPath, repoName);
 
-    console.log(`🔄 Cloning ${url} to ${fullPath}`);
+    console.log(`🔄 Cloning ${httpsUrl} to ${fullPath}`);
 
     // Check if destination already exists
     try {
@@ -50,7 +53,7 @@ export class GitManager {
     }
 
     return new Promise((resolve) => {
-      const args = ["clone", "--progress", url, fullPath];
+      const args = ["clone", "--progress", httpsUrl, fullPath];
       const gitProcess = spawn("git", args, {
         stdio: ["pipe", "pipe", "pipe"],
       });
@@ -119,6 +122,29 @@ export class GitManager {
   }
 
   /**
+   * Convert SSH URL to HTTPS URL for public repos
+   * git@github.com:user/repo.git -> https://github.com/user/repo.git
+   */
+  private convertToHttps(url: string): string {
+    // Already HTTPS
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      return url;
+    }
+
+    // SSH format: git@github.com:user/repo.git
+    const sshMatch = url.match(/^git@([^:]+):(.+)$/);
+    if (sshMatch) {
+      const host = sshMatch[1];
+      const path = sshMatch[2];
+      console.log(`🔄 Converting SSH URL to HTTPS: git@${host}:${path} -> https://${host}/${path}`);
+      return `https://${host}/${path}`;
+    }
+
+    // Unknown format, return as-is
+    return url;
+  }
+
+  /**
    * Extract repository name from URL
    */
   private extractRepoName(url: string): string {
@@ -126,12 +152,21 @@ export class GitManager {
     // https://github.com/user/repo.git
     // https://github.com/user/repo
     // git@github.com:user/repo.git
-    const match = url.match(/\/([^\/]+?)(\.git)?$/);
-    if (match) {
-      return match[1];
+    
+    // First try HTTPS format
+    const httpsMatch = url.match(/\/([^\/]+?)(\.git)?$/);
+    if (httpsMatch) {
+      return httpsMatch[1];
     }
+    
+    // Try SSH format: git@github.com:user/repo.git
+    const sshMatch = url.match(/:.*\/([^\/]+?)(\.git)?$/);
+    if (sshMatch) {
+      return sshMatch[1];
+    }
+    
     // Fallback: use last segment
-    return url.split("/").pop()?.replace(".git", "") || "cloned-repo";
+    return url.split(/[\/:]/).pop()?.replace(".git", "") || "cloned-repo";
   }
 
   /**
