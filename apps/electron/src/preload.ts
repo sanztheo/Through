@@ -165,6 +165,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("agent:accept", backupPath),
   rejectAgentChange: (backupPath: string) =>
     ipcRenderer.invoke("agent:reject", backupPath),
+
+  // Settings
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  setSettings: (settings: { aiModel?: string }) =>
+    ipcRenderer.invoke("settings:set", settings),
 });
 
 console.log("Preload script loaded");

@@ -7,6 +7,7 @@ import { Folder, GitBranch } from "lucide-react";
 import { ProjectList } from "@/components/ProjectList";
 import { ContextMenu } from "@/components/ContextMenu";
 import { ProjectSetupModal } from "@/components/ProjectSetupModal";
+import { SettingsModal } from "@/components/SettingsModal";
 
 interface ProjectInfo {
   path: string;
@@ -32,6 +33,7 @@ export default function HomePage() {
     path: string;
     name: string;
   } | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -161,7 +163,10 @@ export default function HomePage() {
               Business
             </button>
             <span>·</span>
-            <button className="hover:text-gray-700 transition-colors">
+            <button 
+              onClick={() => setShowSettings(true)}
+              className="hover:text-gray-700 transition-colors"
+            >
               Settings
             </button>
           </div>
@@ -241,6 +246,13 @@ export default function HomePage() {
           onSubmit={handleProjectSetupSubmit}
         />
       )}
+
+      {/* Settings Modal */}
+      <SettingsModal
+        isOpen={showSettings}
+        onClose={() => setShowSettings(false)}
+        api={api}
+      />
     </main>
   );
 }

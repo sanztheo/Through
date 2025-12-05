@@ -1,9 +1,12 @@
 import { openai } from "@ai-sdk/openai";
+import { anthropic } from "@ai-sdk/anthropic";
+import { google } from "@ai-sdk/google";
 import { generateText, tool, stepCountIs } from "ai";
 import { z } from "zod";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { glob } from "glob";
+import { getSettings, AI_MODELS } from "./settings.js";
 
 export interface ElementInfo {
   tagName: string;
@@ -222,28 +225,67 @@ export async function runCodeAgent(params: {
       },
     });
 
-    const result = await generateText({
-      model: openai("gpt-4o-mini"),
-      stopWhen: stepCountIs(10),
-      system: `You are a code modification agent for a web development project.
+    // Get the selected model from settings
+    const settings = getSettings();
+    const modelConfig = AI_MODELS.find(m => m.id === settings.aiModel) || AI_MODELS.find(m => m.id === "gpt-5-mini")!;
+    
+    console.log(`🧠 Using model: ${modelConfig.name} (${modelConfig.provider})`);
+    
+    // Get the model instance based on provider
+    const getModel = () => {
+      switch (modelConfig.provider) {
+        case "anthropic":
+          return anthropic(modelConfig.modelId);
+        case "google":
+          return google(modelConfig.modelId);
+        case "openai":
+        default:
+          return openai(modelConfig.modelId);
+      }
+    };
 
-Your task is to find and modify code based on the user's request.
+    const result = await generateText({
+      model: getModel(),
+      stopWhen: stepCountIs(10),
+      system: `You are an EXPERT frontend developer specialized in modern web development.
+You are exceptionally skilled in:
+- **Tailwind CSS v4**: utility classes, responsive design, dark mode, animations
+- **React/Next.js**: components, hooks, state management
+- **CSS**: flexbox, grid, custom properties, transitions
+- **Design systems**: shadcn/ui, Radix UI, daisyUI
 
 ELEMENT CONTEXT:
 ${elementContext}
 
-INSTRUCTIONS:
-1. First, use searchInProject to find files containing the element's classes, ID, or text content
-2. Read the most relevant file(s) to understand the code structure
-3. Determine what modification is needed based on the user's request
-4. Apply the modification using writeFile
+<INSTRUCTIONS>
+1. Use searchInProject to find files containing the element's classes, ID, or text
+2. Read the relevant file(s) to understand the code structure
+3. Apply the modification using writeFile
+</INSTRUCTIONS>
 
-IMPORTANT:
-- Focus on finding the exact component/element in the source code
-- For React/Vue/Svelte projects, the element is likely in a .tsx, .jsx, .vue, or .svelte file
-- For CSS changes, look in .css, .scss, or inline styles
+<TAILWIND_BEST_PRACTICES>
+- Use modern Tailwind v4 utility classes
+- Prefer semantic class combinations (flex items-center gap-2)
+- Use responsive prefixes: sm:, md:, lg:, xl:
+- Use dark mode: dark:bg-gray-800
+- Use hover/focus states: hover:bg-blue-600 focus:ring-2
+- Use transitions: transition-all duration-200
+- Avoid arbitrary values when possible
+</TAILWIND_BEST_PRACTICES>
+
+<CSS_BEST_PRACTICES>
+- Use CSS custom properties for theming
+- Prefer flexbox/grid over floats
+- Use clamp() for fluid typography
+- Add smooth transitions for better UX
+</CSS_BEST_PRACTICES>
+
+<OUTPUT_RULES>
 - Make minimal, targeted changes
-- Preserve the existing code structure and formatting`,
+- Preserve existing code structure
+- Use the project's existing patterns and style
+- Generate clean, production-ready code
+</OUTPUT_RULES>`,
       prompt: userPrompt,
       tools: {
         searchInProject: searchInProjectTool,

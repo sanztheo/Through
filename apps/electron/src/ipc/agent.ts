@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
-import { runCodeAgent, acceptChange, rejectChange, ElementInfo } from "../services/codeAgent";
+import { runCodeAgent, acceptChange, rejectChange, ElementInfo } from "../services/codeAgent.js";
+import { getSettings, saveSettings, AI_MODELS } from "../services/settings.js";
 
 export function registerAgentHandlers() {
   console.log("Registering Agent IPC handlers...");
@@ -47,6 +48,19 @@ export function registerAgentHandlers() {
   ipcMain.handle("agent:reject", async (event, backupPath: string) => {
     console.log("❌ IPC: Rejecting change...");
     return await rejectChange(backupPath);
+  });
+
+  // Get settings
+  ipcMain.handle("settings:get", async () => {
+    return {
+      settings: getSettings(),
+      models: AI_MODELS,
+    };
+  });
+
+  // Save settings
+  ipcMain.handle("settings:set", async (event, settings: { aiModel?: string }) => {
+    return saveSettings(settings);
   });
 
   console.log("✅ Agent IPC handlers registered");
