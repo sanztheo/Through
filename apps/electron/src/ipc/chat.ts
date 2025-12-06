@@ -3,6 +3,7 @@
  */
 import { ipcMain, BrowserWindow } from "electron";
 import { getChatAgentService } from "../services/ChatAgentService.js";
+import { getSettings, saveSettings, AppSettings, AI_MODELS } from "../services/settings";
 
 export function registerChatHandlers(mainWindow: BrowserWindow) {
   console.log("Registering Chat IPC handlers...");
@@ -18,9 +19,10 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
       data: {
         projectPath: string;
         messages: Array<{ role: string; content: string }>;
+        conversationId?: string;
       }
     ) => {
-      console.log(`💬 IPC: Starting chat stream for ${data.projectPath}`);
+      console.log(`💬 IPC: Starting chat stream for ${data.projectPath} (Conversation: ${data.conversationId})`);
 
       try {
         const result = await chatService.streamChat(
@@ -28,7 +30,8 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
           data.messages.map((m) => ({
             role: m.role as "user" | "assistant" | "system",
             content: m.content,
-          }))
+          })),
+          data.conversationId
         );
         return result;
       } catch (error: any) {
@@ -67,6 +70,30 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
     console.log("🗑️ IPC: Clearing pending changes...");
     chatService.clearPendingChanges();
     return { success: true };
+  });
+
+  // ==================== HISTORY IPC ====================
+  
+  ipcMain.handle("chat:get-history", async (_, projectPath: string) => {
+    return await chatService.getConversations(projectPath);
+  });
+
+  ipcMain.handle("chat:delete-conversation", async (_, data: { projectPath: string; conversationId: string }) => {
+    return await chatService.deleteConversation(data.projectPath, data.conversationId);
+  });
+
+  // ==================== SETTINGS IPC ====================
+
+  ipcMain.handle("settings:get", async () => {
+    return getSettings();
+  });
+
+  ipcMain.handle("settings:set", async (_, settings: Partial<AppSettings>) => {
+    return saveSettings(settings);
+  });
+
+  ipcMain.handle("settings:get-models", async () => {
+    return AI_MODELS;
   });
 
   console.log("✅ Chat IPC handlers registered");

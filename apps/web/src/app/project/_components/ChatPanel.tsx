@@ -1,17 +1,27 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { X, Send, Square, Trash2, Loader2, ChevronDown, ChevronRight, Check, RotateCcw, EyeOff, FileText } from "lucide-react";
-import type { TimelineItem, PendingChange } from "../_hooks/useChatAgent";
+
+import { X, Send, Square, Trash2, Loader2, ChevronDown, ChevronRight, Check, RotateCcw, EyeOff, FileText, History, Plus, MoreHorizontal, MessageSquare, ArrowUp, Brain, Zap } from "lucide-react";
+import type { TimelineItem, PendingChange, AppSettings, ModelDefinition } from "../_hooks/useChatAgent";
+
+interface ConversationSummary {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: any[];
+}
 
 interface ChatPanelProps {
   timeline: TimelineItem[];
+  conversations?: ConversationSummary[];
+  currentConversationId?: string | null;
   isStreaming: boolean;
   isThinking?: boolean;
   currentStreamText: string;
   currentThinkingText?: string;
   pendingChanges?: PendingChange[];
-  projectFiles?: string[]; // List of project files for @ mentions
+  projectFiles?: string[];
   onSendMessage: (content: string) => void;
   onAbort: () => void;
   onClearHistory: () => void;
@@ -19,6 +29,12 @@ interface ChatPanelProps {
   onValidateChanges?: () => void;
   onRejectChanges?: () => void;
   onDismissChanges?: () => void;
+  onLoadConversation?: (id: string) => void;
+  onNewConversation?: () => void;
+  onDeleteConversation?: (id: string) => void;
+  settings?: AppSettings | null;
+  availableModels?: ModelDefinition[];
+  onUpdateSettings?: (settings: Partial<AppSettings>) => void;
 }
 
 // Tool icons mapping
@@ -326,6 +342,8 @@ function ThinkingCard({ content, isStreaming }: { content: string; isStreaming?:
 
 export function ChatPanel({
   timeline,
+  conversations = [],
+  currentConversationId,
   isStreaming,
   isThinking,
   currentStreamText,
@@ -339,8 +357,16 @@ export function ChatPanel({
   onValidateChanges,
   onRejectChanges,
   onDismissChanges,
+  onLoadConversation,
+  onNewConversation,
+  onDeleteConversation,
+  settings,
+  availableModels = [],
+  onUpdateSettings,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
   const [mentionedFiles, setMentionedFiles] = useState<string[]>([]);
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
@@ -348,6 +374,37 @@ export function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Group conversations by date (Today, Yesterday, Older)
+  const groupedConversations = useMemo(() => {
+    const groups: { label: string; items: ConversationSummary[] }[] = [
+      { label: "Today", items: [] },
+      { label: "Yesterday", items: [] },
+      { label: "Previous 7 Days", items: [] },
+      { label: "Older", items: [] },
+    ];
+
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const lastWeek = new Date();
+    lastWeek.setDate(lastWeek.getDate() - 7);
+
+    conversations.forEach(conv => {
+      const date = new Date(conv.timestamp);
+      if (date.toDateString() === today.toDateString()) {
+        groups[0].items.push(conv);
+      } else if (date.toDateString() === yesterday.toDateString()) {
+        groups[1].items.push(conv);
+      } else if (date > lastWeek) {
+        groups[2].items.push(conv);
+      } else {
+        groups[3].items.push(conv);
+      }
+    });
+
+    return groups.filter(g => g.items.length > 0);
+  }, [conversations]);
 
   // Filter files based on mention filter
   const filteredFiles = useMemo(() => {
@@ -458,122 +515,218 @@ export function ChatPanel({
   };
 
   return (
-    <div className="w-[400px] h-full flex flex-col bg-white border-l border-gray-200 shadow-lg">
+    <div className="w-[400px] h-full flex flex-col bg-white border-l border-gray-200 shadow-xl font-sans relative">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 bg-white">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${isStreaming ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
-          <h2 className="font-semibold text-gray-800">Assistant IA</h2>
+          <h2 className="font-semibold text-gray-900">Through</h2>
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={onClearHistory}
-            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Effacer l'historique"
+            onClick={() => {
+              onNewConversation?.();
+              setIsHistoryOpen(false);
+            }}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            title="Nouvelle conversation"
           >
-            <Trash2 className="w-4 h-4" />
+            <Plus className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setIsHistoryOpen(!isHistoryOpen)}
+            className={`p-2 rounded-lg hover:bg-gray-100 transition-colors ${isHistoryOpen ? "bg-gray-100 text-gray-900" : "text-gray-500"}`}
+            title="Historique"
+          >
+            <History className="w-5 h-5" />
+          </button>
+          <button
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            title="Plus"
+          >
+            <MoreHorizontal className="w-5 h-5" />
           </button>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500 transition-colors"
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
             title="Fermer"
           >
-            <X className="w-4 h-4" />
+            <X className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      {/* Timeline Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {timeline.length === 0 && !isStreaming && (
-          <div className="text-center text-gray-400 py-12">
-            <p className="text-sm">Commencez une conversation</p>
-            <p className="text-xs mt-2">
-              Ex: "Modifie le style du bouton" ou "Ajoute une animation"
+      {/* History Overlay */}
+      {isHistoryOpen && (
+        <div className="absolute top-[57px] left-0 w-full bottom-0 bg-white z-20 overflow-y-auto border-t border-gray-100 p-2 animate-in slide-in-from-top-2 fade-in duration-200">
+          <div className="space-y-4 p-2">
+            {groupedConversations.map((group) => (
+              <div key={group.label}>
+                <h3 className="text-xs font-semibold text-gray-400 mb-2 px-2 uppercase tracking-wider">{group.label}</h3>
+                <div className="space-y-1">
+                  {group.items.map((conv) => (
+                    <div 
+                      key={conv.id} 
+                      className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${
+                        currentConversationId === conv.id ? "bg-blue-50" : "hover:bg-gray-50"
+                      }`}
+                      onClick={() => {
+                        onLoadConversation?.(conv.id);
+                        setIsHistoryOpen(false);
+                      }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium truncate ${currentConversationId === conv.id ? "text-blue-700" : "text-gray-700"}`}>
+                          {conv.title || "Untitled Conversation"}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteConversation?.(conv.id);
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 text-gray-400 hover:text-red-500 rounded transition-all"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+            
+            {conversations.length === 0 && (
+              <div className="text-center text-gray-400 py-8">
+                <History className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                <p>Aucun historique récente</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Timeline Area or Empty State */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {timeline.length === 0 && !isStreaming ? (
+          <div className="h-full flex flex-col items-center justify-center text-gray-400 -mt-10">
+            <div className="w-16 h-16 bg-gray-50 rounded-2xl flex items-center justify-center mb-6 border border-gray-100">
+              <span className="text-2xl">⚡️</span>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Through Agent</h3>
+            <p className="text-sm text-center max-w-[260px] leading-relaxed">
+              Je peux analyser votre projet, modifier des fichiers et exécuter des commandes.
             </p>
+            
+            <div className="mt-8 grid grid-cols-2 gap-2 w-full max-w-[320px]">
+              <button 
+                onClick={() => setInput("Explique moi ce projet")}
+                className="p-3 text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl transition-colors"
+                type="button"
+              >
+                🔍 Explique le projet
+              </button>
+              <button 
+                 onClick={() => setInput("Check les erreurs Typescript")}
+                 className="p-3 text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl transition-colors"
+                 type="button"
+              >
+                🐞 Check erreurs
+              </button>
+              <button 
+                onClick={() => setInput("Optimise le composant Button")}
+                className="p-3 text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl transition-colors"
+                type="button"
+              >
+                🎨 Optimise UI
+              </button>
+              <button 
+                onClick={() => setInput("Crée un fichier README.md")}
+                className="p-3 text-left text-xs bg-gray-50 hover:bg-gray-100 border border-gray-100 rounded-xl transition-colors"
+                type="button"
+              >
+                📝 Créer README
+              </button>
+            </div>
           </div>
-        )}
-
-        {/* Render timeline items chronologically */}
-        {timeline.map((item) => {
-          if (item.type === "user-message") {
-            return (
-              <div key={item.id} className="flex justify-end">
-                <div className="max-w-[85%] rounded-lg px-3 py-2 bg-blue-600 text-white">
-                  <p className="text-sm whitespace-pre-wrap">{item.content}</p>
-                  <span className="text-[10px] opacity-60 mt-1 block">
-                    {item.timestamp.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                </div>
-              </div>
-            );
-          }
-
-          if (item.type === "assistant-message") {
-            return (
-              <div key={item.id} className="flex justify-start">
-                <div className="max-w-[85%] rounded-lg px-3 py-2 bg-gray-100 text-gray-800">
-                  <div className="text-sm">
-                    <SimpleMarkdown content={item.content} />
+        ) : (
+          <div className="space-y-6 pb-4">
+            {timeline.map((item) => {
+              if (item.type === "user-message") {
+                return (
+                  <div key={item.id} className="flex justify-end">
+                    <div className="max-w-[85%] rounded-2xl rounded-tr-sm px-4 py-3 bg-blue-600 text-white shadow-sm">
+                      <p className="text-sm whitespace-pre-wrap">{item.content}</p>
+                    </div>
                   </div>
-                  <span className="text-[10px] opacity-60 mt-1 block">
-                    {item.timestamp.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
-                  </span>
+                );
+              }
+
+              if (item.type === "assistant-message") {
+                return (
+                  <div key={item.id} className="flex justify-start">
+                    <div className="max-w-[90%] rounded-2xl rounded-tl-sm px-4 py-3 bg-white border border-gray-100 text-gray-800 shadow-sm">
+                      <div className="text-sm prose prose-sm max-w-none">
+                        <SimpleMarkdown content={item.content} />
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (item.type === "tool-call") {
+                return (
+                  <div key={item.id} className="mx-2">
+                    <ToolCard item={item} />
+                  </div>
+                );
+              }
+
+              if (item.type === "thinking") {
+                return (
+                  <ThinkingCard key={item.id} content={item.content} />
+                );
+              }
+
+              return null;
+            })}
+
+            {/* Current Thinking (streaming) */}
+            {isThinking && (
+              <ThinkingCard content={currentThinkingText || ""} isStreaming={true} />
+            )}
+
+            {/* Streaming Response */}
+            {isStreaming && currentStreamText && (
+              <div className="flex justify-start">
+                <div className="max-w-[90%] rounded-2xl rounded-tl-sm px-4 py-3 bg-white border border-gray-100 text-gray-800 shadow-sm">
+                  <div className="text-sm">
+                    <SimpleMarkdown content={currentStreamText} />
+                  </div>
+                  <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
                 </div>
               </div>
-            );
-          }
+            )}
 
-          if (item.type === "tool-call") {
-            return (
-              <div key={item.id} className="mx-2">
-                <ToolCard item={item} />
+            {/* Loading/Working indicator */}
+            {isStreaming && !currentStreamText && !isThinking && (
+              <div className="mx-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="flex items-center gap-3">
+                  <div className="relative">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-blue-700">L'agent analyse...</p>
+                    <p className="text-xs text-blue-500">Exploration du projet et exécution des outils</p>
+                  </div>
+                </div>
               </div>
-            );
-          }
-
-          if (item.type === "thinking") {
-            return (
-              <ThinkingCard key={item.id} content={item.content} />
-            );
-          }
-
-          return null;
-        })}
-
-        {/* Current Thinking (streaming) */}
-        {isThinking && (
-          <ThinkingCard content={currentThinkingText || ""} isStreaming={true} />
-        )}
-
-        {/* Streaming Response */}
-        {isStreaming && currentStreamText && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-lg px-3 py-2 bg-gray-100 text-gray-800">
-              <div className="text-sm">
-                <SimpleMarkdown content={currentStreamText} />
-              </div>
-              <span className="inline-block w-2 h-4 bg-blue-500 animate-pulse ml-1" />
-            </div>
+            )}
+            
+            <div ref={messagesEndRef} />
           </div>
         )}
-
-        {/* Loading/Working indicator when agent is processing */}
-        {isStreaming && !currentStreamText && !isThinking && (
-          <div className="mx-2 rounded-lg border border-blue-200 bg-blue-50 p-3">
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-blue-700">L'agent analyse...</p>
-                <p className="text-xs text-blue-500">Exploration du projet et exécution des outils</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Pending Changes Validation Bar */}
@@ -666,41 +819,128 @@ export function ChatPanel({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={mentionedFiles.length > 0 ? "Décrivez ce que vous voulez faire..." : "Décrivez ce que vous voulez modifier... (@ pour mentionner un fichier)"}
-            className="flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[60px] max-h-[120px]"
-            disabled={isStreaming}
-          />
-          <div className="flex flex-col gap-1">
-            {isStreaming ? (
-              <button
-                type="button"
-                onClick={onAbort}
-                className="p-2 rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors"
-                title="Arrêter"
-              >
-                <Square className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!input.trim() && mentionedFiles.length === 0}
-                className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Envoyer (⌘+Enter)"
-              >
-                <Send className="w-4 h-4" />
-              </button>
-            )}
+        <div className="relative">
+          <div className="rounded-xl border border-gray-200 bg-white shadow-sm transition-all focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder="Posez une question, @ pour mentionner..."
+              className="w-full resize-none bg-transparent border-none px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 min-h-[50px] max-h-[200px]"
+              rows={1}
+              disabled={isStreaming}
+              style={{ overflowY: 'hidden' }}
+              onInput={(e) => {
+                const target = e.target as HTMLTextAreaElement;
+                target.style.height = 'auto';
+                target.style.height = `${Math.min(target.scrollHeight, 200)}px`;
+              }}
+            />
+            
+            <div className="flex items-center justify-between px-2 pb-2">
+              <div className="flex items-center gap-2">
+                <button 
+                  type="button" 
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors"
+                  title="Ajouter un fichier"
+                >
+                  <Plus className="w-4 h-4" />
+                </button>
+                
+                <div className="h-4 w-[1px] bg-gray-200 mx-1" />
+                
+                {/* Thinking Mode Toggle */}
+                <button 
+                  type="button" 
+                  onClick={() => onUpdateSettings?.({ extendedThinking: !settings?.extendedThinking })}
+                  className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all ${
+                    settings?.extendedThinking 
+                      ? "text-purple-700 bg-purple-50 hover:bg-purple-100 ring-1 ring-purple-200" 
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  }`}
+                  title={settings?.extendedThinking ? "Mode pensée activé" : "Mode rapide"}
+                >
+                  {settings?.extendedThinking ? (
+                    <>
+                      <Brain className="w-3 h-3" />
+                      <span>Thinking</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-3 h-3" />
+                      <span>Fast</span>
+                    </>
+                  )}
+                </button>
+
+                 {/* Model Selector */}
+                <div className="relative">
+                  <button 
+                    type="button" 
+                    onClick={() => setIsModelMenuOpen(!isModelMenuOpen)}
+                    className="flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-md transition-colors"
+                  >
+                    <span>{availableModels.find(m => m.id === settings?.aiModel)?.name || "Model"}</span>
+                    <ChevronDown className="w-3 h-3 opacity-50" />
+                  </button>
+
+                  {isModelMenuOpen && (
+                    <>
+                      <div 
+                        className="fixed inset-0 z-10" 
+                        onClick={() => setIsModelMenuOpen(false)} 
+                      />
+                      <div className="absolute bottom-full left-0 mb-1 w-64 bg-white border border-gray-200 rounded-lg shadow-xl z-20 py-1 max-h-64 overflow-y-auto">
+                        {availableModels.map((model) => (
+                           <button
+                            key={model.id}
+                            type="button"
+                            onClick={() => {
+                              onUpdateSettings?.({ aiModel: model.id });
+                              setIsModelMenuOpen(false);
+                            }}
+                            className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-50 flex flex-col gap-0.5 ${
+                              settings?.aiModel === model.id ? "bg-blue-50 text-blue-700" : "text-gray-700"
+                            }`}
+                          >
+                            <span className="font-medium">{model.name}</span>
+                            <span className="text-[10px] text-gray-400 truncate">{model.description}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                 {isStreaming ? (
+                   <button
+                    onClick={onAbort}
+                    className="p-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm"
+                  >
+                    <Square className="w-4 h-4 fill-current" />
+                  </button>
+                 ) : (
+                   <button
+                    onClick={() => handleSubmit()}
+                    disabled={!input.trim() && mentionedFiles.length === 0}
+                    className="p-1.5 bg-gray-900 text-white rounded-lg hover:bg-gray-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ArrowUp className="w-4 h-4" />
+                  </button>
+                 )}
+              </div>
+            </div>
           </div>
-        </form>
-        <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          ⌘+Enter pour envoyer • @ pour mentionner un fichier
-        </p>
+          
+          <div className="mt-2 flex justify-center">
+            <p className="text-[10px] text-gray-400">
+               <span className="font-mono text-xs">@</span> pour mentionner • <span className="font-mono text-xs">⏎</span> pour envoyer
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

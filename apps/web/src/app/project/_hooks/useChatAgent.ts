@@ -18,20 +18,52 @@ export interface PendingChange {
   timestamp: Date;
 }
 
+export interface AppSettings {
+  aiModel: string;
+  defaultClonePath: string;
+  extendedThinking: boolean;
+}
+
+export interface ModelDefinition {
+  id: string;
+  name: string;
+  provider: string;
+  description: string;
+  supportsThinking: boolean;
+}
+
+interface ConversationSummary {
+  id: string;
+  title: string;
+  timestamp: string;
+  messages: any[];
+}
+
 interface ElectronAPI {
-  streamChat?: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<any>;
+  streamChat?: (projectPath: string, messages: Array<{ role: string; content: string }>, conversationId?: string) => Promise<{ success: boolean; conversationId?: string }>;
   onChatChunk?: (callback: (chunk: any) => void) => () => void;
   onChatToolCall?: (callback: (toolCall: { id: string; name: string; args: any }) => void) => () => void;
   onChatToolResult?: (callback: (result: { id: string; name: string; result: any }) => void) => () => void;
   onPendingChanges?: (callback: (changes: PendingChange[]) => void) => () => void;
+  onHistoryUpdated?: (callback: (conversations: ConversationSummary[]) => void) => () => void;
   abortChat?: () => Promise<void>;
   validateChanges?: () => Promise<{ success: boolean }>;
   rejectChanges?: () => Promise<{ success: boolean }>;
   clearPendingChanges?: () => Promise<{ success: boolean }>;
+  getHistory?: (projectPath: string) => Promise<ConversationSummary[]>;
+  deleteConversation?: (params: { projectPath: string; conversationId: string }) => Promise<void>;
+  getSettings?: () => Promise<AppSettings>;
+  saveSettings?: (settings: Partial<AppSettings>) => Promise<AppSettings>;
+  getModels?: () => Promise<ModelDefinition[]>;
 }
 
 export function useChatAgent(api: ElectronAPI | null, projectPath: string | null) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [availableModels, setAvailableModels] = useState<ModelDefinition[]>([]);
+  
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamText, setCurrentStreamText] = useState("");
   const [currentThinkingText, setCurrentThinkingText] = useState("");
@@ -206,6 +238,14 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       });
     }
 
+    // Listen for history updates
+    if (api.onHistoryUpdated) {
+      api.onHistoryUpdated((list) => {
+        setConversations(list);
+      });
+    }
+
+
     // Cleanup on unmount
     return () => {
       listenersSetupRef.current = false;
@@ -248,14 +288,17 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       messages.push({ role: "user", content: content.trim() });
 
       try {
-        await api.streamChat(projectPath, messages);
+        const result = await api.streamChat(projectPath, messages, currentConversationId || undefined);
+        if (result.success && result.conversationId && !currentConversationId) {
+          setCurrentConversationId(result.conversationId);
+        }
       } catch (error: any) {
         console.error("Chat error:", error);
         setIsStreaming(false);
         setIsThinking(false);
       }
     },
-    [api, projectPath, timeline]
+    [api, projectPath, timeline, currentConversationId]
   );
 
   const abort = useCallback(async () => {
@@ -308,6 +351,89 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     await api.clearPendingChanges();
   }, [api]);
 
+  // Load history
+  const loadHistory = useCallback(async () => {
+    if (!api?.getHistory || !projectPath) return;
+    const history = await api.getHistory(projectPath);
+    setConversations(history);
+  }, [api, projectPath]);
+
+  // Initial load
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
+
+  // Load specific conversation
+  const loadConversation = useCallback((conversationId: string) => {
+    const conversation = conversations.find(c => c.id === conversationId);
+    if (!conversation) return;
+
+    setCurrentConversationId(conversationId);
+    
+    // Transform to timeline items
+    const newTimeline: TimelineItem[] = conversation.messages.map((msg, index) => {
+      if (msg.role === "user") {
+        return {
+          type: "user-message",
+          id: `msg-${index}`,
+          content: msg.content,
+          timestamp: new Date(msg.createdAt || conversation.timestamp),
+        };
+      } else {
+        return {
+          type: "assistant-message",
+          id: `msg-${index}`,
+          content: msg.content,
+          timestamp: new Date(msg.createdAt || conversation.timestamp),
+        };
+      }
+    });
+
+    setTimeline(newTimeline);
+  }, [conversations]);
+
+  const startNewConversation = useCallback(() => {
+    setCurrentConversationId(null);
+    setTimeline([]);
+    setCurrentStreamText("");
+    setCurrentThinkingText("");
+    streamTextRef.current = "";
+    thinkingTextRef.current = "";
+    currentMessageIdRef.current = null;
+    currentThinkingIdRef.current = null;
+    setIsThinking(false);
+  }, []);
+
+  const deleteConversation = useCallback(async (conversationId: string) => {
+    if (!api?.deleteConversation || !projectPath) return;
+    await api.deleteConversation({ projectPath, conversationId });
+    if (currentConversationId === conversationId) {
+      startNewConversation();
+    }
+  }, [api, projectPath, currentConversationId, startNewConversation]);
+
+  // Load settings and models
+  const loadSettingsAndModels = useCallback(async () => {
+    if (!api?.getSettings || !api?.getModels) return;
+    const [currentSettings, models] = await Promise.all([
+      api.getSettings(),
+      api.getModels()
+    ]);
+    setSettings(currentSettings);
+    setAvailableModels(models);
+  }, [api]);
+
+  // Initial load of settings
+  useEffect(() => {
+    loadSettingsAndModels();
+  }, [loadSettingsAndModels]);
+
+  const updateSettings = useCallback(async (newSettings: Partial<AppSettings>) => {
+    if (!api?.saveSettings) return;
+    const updated = await api.saveSettings(newSettings);
+    setSettings(updated);
+  }, [api]);
+
   return {
     timeline,
     isStreaming,
@@ -321,5 +447,14 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     validatePendingChanges,
     rejectPendingChanges,
     dismissPendingChanges,
+    conversations,
+    currentConversationId,
+    loadHistory,
+    loadConversation,
+    startNewConversation,
+    deleteConversation,
+    settings,
+    availableModels,
+    updateSettings,
   };
 }

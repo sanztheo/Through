@@ -2,7 +2,7 @@
  * ChatAgentService - Streaming chat with tool visibility for code editing
  * Uses Vercel AI SDK (compatible with Electron CommonJS)
  */
-import { streamText, tool, stepCountIs } from "ai";
+import { streamText, tool, stepCountIs, generateText } from "ai";
 import { BrowserWindow } from "electron";
 import { getModel, getModelInfo } from "./settings.js";
 import * as fs from "fs/promises";
@@ -11,6 +11,7 @@ import { glob } from "glob";
 import { z } from "zod";
 import { exec } from "child_process";
 import { promisify } from "util";
+import * as crypto from "crypto";
 
 const execAsync = promisify(exec);
 
@@ -18,6 +19,14 @@ const execAsync = promisify(exec);
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  createdAt?: string;
+}
+
+export interface Conversation {
+  id: string;
+  title: string;
+  timestamp: string; // ISO date
+  messages: ChatMessage[];
 }
 
 export interface ToolCallEvent {
@@ -25,6 +34,7 @@ export interface ToolCallEvent {
   name: string;
   args: Record<string, any>;
 }
+
 
 export interface ToolResultEvent {
   id: string;
@@ -145,6 +155,90 @@ export class ChatAgentService {
   clearPendingChanges() {
     this.pendingChanges = [];
     this.emitPendingChanges();
+  }
+
+  // ==================== HISTORY MANAGEMENT ====================
+
+  private getHistoryDir(projectPath: string) {
+    const hash = crypto.createHash("md5").update(projectPath).digest("hex");
+    return path.join(process.cwd(), "cache", "chat", hash);
+  }
+
+  async getConversations(projectPath: string): Promise<Conversation[]> {
+    try {
+      const dir = this.getHistoryDir(projectPath);
+      await fs.mkdir(dir, { recursive: true });
+      
+      const files = await fs.readdir(dir);
+      const conversations: Conversation[] = [];
+      
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          try {
+            const content = await fs.readFile(path.join(dir, file), "utf-8");
+            conversations.push(JSON.parse(content));
+          } catch (e) {
+            console.error(`Failed to read conversation ${file}`, e);
+          }
+        }
+      }
+      
+      // Sort by timestamp desc
+      return conversations.sort((a, b) => 
+        new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+    } catch (error) {
+      console.error("Failed to get conversations", error);
+      return [];
+    }
+  }
+
+  async saveConversation(projectPath: string, conversation: Conversation): Promise<void> {
+    try {
+      const dir = this.getHistoryDir(projectPath);
+      await fs.mkdir(dir, { recursive: true });
+      
+      const filePath = path.join(dir, `${conversation.id}.json`);
+      await fs.writeFile(filePath, JSON.stringify(conversation, null, 2), "utf-8");
+      
+      // Emit update
+      this.emit("chat:history-updated", await this.getConversations(projectPath));
+    } catch (error) {
+      console.error("Failed to save conversation", error);
+    }
+  }
+
+  async deleteConversation(projectPath: string, conversationId: string): Promise<void> {
+    try {
+      const dir = this.getHistoryDir(projectPath);
+      const filePath = path.join(dir, `${conversationId}.json`);
+      await fs.unlink(filePath);
+      
+      // Emit update
+      this.emit("chat:history-updated", await this.getConversations(projectPath));
+    } catch (error) {
+      console.error("Failed to delete conversation", error);
+    }
+  }
+
+  async generateTitle(messages: ChatMessage[]): Promise<string> {
+    try {
+      const userMessages = messages.filter(m => m.role === "user");
+      if (userMessages.length === 0) return "New Conversation";
+      
+      const lastMessage = userMessages[userMessages.length - 1].content;
+      
+      // Use the model to generate a title
+      const { text } = await generateText({
+        model: getModel(),
+        prompt: `Generate a very short, concise title (max 5 words) for a conversation that starts with this user message. respond ONLY with the title, no quotes.\n\nMessage: ${lastMessage.substring(0, 500)}`,
+      });
+      
+      return text.trim();
+    } catch (error) {
+      console.error("Failed to generate title", error);
+      return "Conversation";
+    }
   }
 
   private emit(channel: string, data: any) {
@@ -884,12 +978,19 @@ export class ChatAgentService {
   /**
    * Stream a chat response with tool calls
    */
-  async streamChat(projectPath: string, messages: ChatMessage[]): Promise<{ success: boolean; error?: string }> {
+  async streamChat(projectPath: string, messages: ChatMessage[], conversationId?: string): Promise<{ success: boolean; error?: string; conversationId?: string }> {
     this.projectPath = projectPath;
     this.abortController = new AbortController();
 
+    // Setup conversation
+    let currentConversationId = conversationId;
+    if (!currentConversationId) {
+      currentConversationId = crypto.randomUUID();
+    }
+
     console.log("💬 Starting chat stream...");
     console.log("📂 Project:", projectPath);
+    console.log("🆔 Conversation:", currentConversationId);
     console.log("📝 Messages:", messages.length);
 
     try {
@@ -1010,6 +1111,7 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
       }
 
       const response = streamText(streamOptions);
+      let fullResponseText = "";
 
       // Use fullStream to capture reasoning/thinking
       for await (const part of response.fullStream) {
@@ -1037,6 +1139,7 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
             break;
           case "text-delta":
             if (part.text) {
+              fullResponseText += part.text;
               this.emitChunk({ type: "text", content: part.text });
             }
             break;
@@ -1050,7 +1153,34 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
       }
 
       this.emitChunk({ type: "done", done: true });
-      return { success: true };
+      
+      // Save conversation at the end
+      const fullConversation: Conversation = {
+        id: currentConversationId!,
+        title: "New Conversation", // Placeholder, will update below if needed
+        timestamp: new Date().toISOString(),
+        messages: [...aiMessages.filter(m => m.role !== "system"), { role: "assistant", content: fullResponseText }] as ChatMessage[]
+      };
+
+      // Retrieve existing if possible to keep title
+      try {
+        const existingList = await this.getConversations(projectPath);
+        const existing = existingList.find(c => c.id === currentConversationId);
+        if (existing) {
+          fullConversation.title = existing.title;
+          // Merge messages properly (the input 'messages' might be user's view, we should trust it but ensure we append the new assistant one)
+          // Actually, 'messages' passed in IS the full history minus the new response.
+        } else {
+          // Generate title for new conversation
+          if (messages.length > 0) {
+            fullConversation.title = await this.generateTitle(messages);
+          }
+        }
+      } catch (e) { console.error(e); }
+
+      await this.saveConversation(projectPath, fullConversation);
+
+      return { success: true, conversationId: currentConversationId };
     } catch (error: any) {
       if (error.name === "AbortError") {
         console.log("🛑 Chat aborted");

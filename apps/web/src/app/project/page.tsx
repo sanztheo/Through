@@ -340,6 +340,8 @@ function ProjectContent() {
         {showChat && (
           <ChatPanel
             timeline={chatAgent.timeline}
+            conversations={chatAgent.conversations}
+            currentConversationId={chatAgent.currentConversationId}
             isStreaming={chatAgent.isStreaming}
             isThinking={chatAgent.isThinking}
             currentStreamText={chatAgent.currentStreamText}
@@ -353,6 +355,12 @@ function ProjectContent() {
             onValidateChanges={chatAgent.validatePendingChanges}
             onRejectChanges={chatAgent.rejectPendingChanges}
             onDismissChanges={chatAgent.dismissPendingChanges}
+            onLoadConversation={chatAgent.loadConversation}
+            onNewConversation={chatAgent.startNewConversation}
+            onDeleteConversation={chatAgent.deleteConversation}
+            settings={chatAgent.settings}
+            availableModels={chatAgent.availableModels}
+            onUpdateSettings={chatAgent.updateSettings}
           />
         )}
       </div>

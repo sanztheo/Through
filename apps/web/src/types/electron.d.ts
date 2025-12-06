@@ -163,12 +163,25 @@ export interface ElectronAPI {
   previewModified: (backupPath: string) => Promise<{ success: boolean }>;
 
   // Settings
-  getSettings: () => Promise<{ settings: any; models: any[] }>;
-  setSettings: (settings: { aiModel?: string; defaultClonePath?: string }) => Promise<void>;
+  getSettings: () => Promise<any>;
+  saveSettings: (settings: any) => Promise<any>;
+  getModels: () => Promise<any[]>;
 
   // Chat
-  streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<void>;
+  streamChat: (projectPath: string, messages: any[], conversationId?: string) => Promise<{ success: boolean; conversationId?: string }>;
   onChatChunk: (callback: (chunk: any) => void) => () => void;
+  onChatToolCall: (callback: (toolCall: any) => void) => () => void;
+  onChatToolResult: (callback: (result: any) => void) => () => void;
+  onPendingChanges: (callback: (changes: any[]) => void) => () => void;
+  onHistoryUpdated: (callback: (conversations: any[]) => void) => () => void;
+  abortChat: () => Promise<void>;
+  validateChanges: () => Promise<{ success: boolean }>;
+  rejectChanges: () => Promise<{ success: boolean }>;
+  clearPendingChanges: () => Promise<{ success: boolean }>;
+
+  // History
+  getHistory: (projectPath: string) => Promise<any[]>;
+  deleteConversation: (data: { projectPath: string; conversationId: string }) => Promise<void>;
 
   // Git operations
   selectFolderForClone: () => Promise<string | null>;

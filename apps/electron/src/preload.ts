@@ -174,40 +174,49 @@ contextBridge.exposeInMainWorld("electronAPI", {
   previewModified: (backupPath: string) =>
     ipcRenderer.invoke("agent:preview-modified", backupPath),
 
-  // Settings
-  getSettings: () => ipcRenderer.invoke("settings:get"),
-  setSettings: (settings: { aiModel?: string }) =>
-    ipcRenderer.invoke("settings:set", settings),
-
   // Chat Agent
-  streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) =>
-    ipcRenderer.invoke("chat:stream", { projectPath, messages }),
+  streamChat: (projectPath: string, messages: any[], conversationId?: string) =>
+    ipcRenderer.invoke("chat:stream", { projectPath, messages, conversationId }),
   onChatChunk: (callback: (chunk: any) => void) => {
-    // Remove existing listeners first to prevent duplicates
-    ipcRenderer.removeAllListeners("chat:chunk");
-    ipcRenderer.on("chat:chunk", (_, chunk) => callback(chunk));
-    return () => ipcRenderer.removeAllListeners("chat:chunk");
+    const subscription = (_: any, chunk: any) => callback(chunk);
+    ipcRenderer.on("chat:chunk", subscription);
+    return () => ipcRenderer.removeListener("chat:chunk", subscription);
   },
-  onChatToolCall: (callback: (toolCall: { id: string; name: string; args: any }) => void) => {
-    ipcRenderer.removeAllListeners("chat:tool-call");
-    ipcRenderer.on("chat:tool-call", (_, toolCall) => callback(toolCall));
-    return () => ipcRenderer.removeAllListeners("chat:tool-call");
+  onChatToolCall: (callback: (toolCall: any) => void) => {
+    const subscription = (_: any, toolCall: any) => callback(toolCall);
+    ipcRenderer.on("chat:tool-call", subscription);
+    return () => ipcRenderer.removeListener("chat:tool-call", subscription);
   },
-  onChatToolResult: (callback: (result: { id: string; name: string; result: any }) => void) => {
-    ipcRenderer.removeAllListeners("chat:tool-result");
-    ipcRenderer.on("chat:tool-result", (_, result) => callback(result));
-    return () => ipcRenderer.removeAllListeners("chat:tool-result");
+  onChatToolResult: (callback: (result: any) => void) => {
+    const subscription = (_: any, result: any) => callback(result);
+    ipcRenderer.on("chat:tool-result", subscription);
+    return () => ipcRenderer.removeListener("chat:tool-result", subscription);
   },
   onPendingChanges: (callback: (changes: any[]) => void) => {
-    ipcRenderer.removeAllListeners("chat:pending-changes");
-    ipcRenderer.on("chat:pending-changes", (_, changes) => callback(changes));
-    return () => ipcRenderer.removeAllListeners("chat:pending-changes");
+    const subscription = (_: any, changes: any[]) => callback(changes);
+    ipcRenderer.on("chat:pending-changes", subscription);
+    return () => ipcRenderer.removeListener("chat:pending-changes", subscription);
+  },
+  onHistoryUpdated: (callback: (conversations: any[]) => void) => {
+    const subscription = (_: any, conversations: any[]) => callback(conversations);
+    ipcRenderer.on("chat:history-updated", subscription);
+    return () => ipcRenderer.removeListener("chat:history-updated", subscription);
   },
   abortChat: () => ipcRenderer.invoke("chat:abort"),
   getPendingChanges: () => ipcRenderer.invoke("chat:get-pending-changes"),
   validateChanges: () => ipcRenderer.invoke("chat:validate-changes"),
   rejectChanges: () => ipcRenderer.invoke("chat:reject-changes"),
   clearPendingChanges: () => ipcRenderer.invoke("chat:clear-pending-changes"),
+  
+  // History
+  getHistory: (projectPath: string) => ipcRenderer.invoke("chat:get-history", projectPath),
+  deleteConversation: (data: { projectPath: string; conversationId: string }) => 
+    ipcRenderer.invoke("chat:delete-conversation", data),
+
+  // Settings
+  getSettings: () => ipcRenderer.invoke("settings:get"),
+  saveSettings: (settings: any) => ipcRenderer.invoke("settings:set", settings),
+  getModels: () => ipcRenderer.invoke("settings:get-models"),
 
   // Git operations
   selectFolderForClone: () => ipcRenderer.invoke("git:select-folder"),
