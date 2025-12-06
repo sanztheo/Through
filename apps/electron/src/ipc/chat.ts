@@ -2,7 +2,7 @@
  * Chat IPC Handlers - Streaming chat with AI agent
  */
 import { ipcMain, BrowserWindow } from "electron";
-import { getChatAgentService } from "../services/ChatAgentService.js";
+import { getChatAgentService } from "../services/chat/ChatAgentService.js";
 import { getSettings, saveSettings, AppSettings, AI_MODELS } from "../services/settings";
 
 export function registerChatHandlers(mainWindow: BrowserWindow) {
