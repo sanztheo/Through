@@ -31,9 +31,10 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamText, setCurrentStreamText] = useState("");
   
-  // Track if we've set up listeners
+  // Use ref to track stream text to avoid closure issues
+  const streamTextRef = useRef("");
+  const hasAddedMessageRef = useRef(false);
   const listenersSetupRef = useRef(false);
-  const cleanupFnsRef = useRef<(() => void)[]>([]);
 
   // Setup listeners only once when API becomes available
   useEffect(() => {
@@ -43,25 +44,26 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
 
     // Listen for text chunks
     if (api.onChatChunk) {
-      const unsub = api.onChatChunk((chunk) => {
+      api.onChatChunk((chunk) => {
         if (chunk.type === "text" && chunk.content) {
-          setCurrentStreamText((prev) => prev + chunk.content);
+          streamTextRef.current += chunk.content;
+          setCurrentStreamText(streamTextRef.current);
         } else if (chunk.type === "done") {
-          // Streaming complete - finalize message
-          setCurrentStreamText((prev) => {
-            if (prev) {
-              const assistantMessage: ChatMessage = {
-                id: `msg-${Date.now()}`,
-                role: "assistant",
-                content: prev,
-                timestamp: new Date(),
-              };
-              setMessages((msgs) => [...msgs, assistantMessage]);
-            }
-            return "";
-          });
+          // Only add message once
+          if (!hasAddedMessageRef.current && streamTextRef.current) {
+            hasAddedMessageRef.current = true;
+            const assistantMessage: ChatMessage = {
+              id: `msg-${Date.now()}`,
+              role: "assistant",
+              content: streamTextRef.current,
+              timestamp: new Date(),
+            };
+            setMessages((msgs) => [...msgs, assistantMessage]);
+          }
+          // Reset state
+          streamTextRef.current = "";
+          setCurrentStreamText("");
           setIsStreaming(false);
-          // Keep activeTools visible - don't clear them
         } else if (chunk.type === "error") {
           const errorMessage: ChatMessage = {
             id: `msg-${Date.now()}`,
@@ -71,15 +73,15 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           };
           setMessages((msgs) => [...msgs, errorMessage]);
           setIsStreaming(false);
+          streamTextRef.current = "";
           setCurrentStreamText("");
         }
       });
-      cleanupFnsRef.current.push(unsub);
     }
 
     // Listen for tool calls
     if (api.onChatToolCall) {
-      const unsub = api.onChatToolCall((toolCall) => {
+      api.onChatToolCall((toolCall) => {
         setActiveTools((tools) => [
           ...tools,
           {
@@ -90,12 +92,11 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           },
         ]);
       });
-      cleanupFnsRef.current.push(unsub);
     }
 
     // Listen for tool results
     if (api.onChatToolResult) {
-      const unsub = api.onChatToolResult((result) => {
+      api.onChatToolResult((result) => {
         setActiveTools((tools) =>
           tools.map((t) =>
             t.id === result.id
@@ -104,12 +105,10 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           )
         );
       });
-      cleanupFnsRef.current.push(unsub);
     }
 
+    // Cleanup on unmount
     return () => {
-      cleanupFnsRef.current.forEach((unsub) => unsub());
-      cleanupFnsRef.current = [];
       listenersSetupRef.current = false;
     };
   }, [api]);
@@ -117,6 +116,10 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
   const sendMessage = useCallback(
     async (content: string) => {
       if (!api?.streamChat || !projectPath || !content.trim()) return;
+
+      // Reset refs for new message
+      streamTextRef.current = "";
+      hasAddedMessageRef.current = false;
 
       // Add user message
       const userMessage: ChatMessage = {
@@ -153,23 +156,26 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       await api.abortChat();
       setIsStreaming(false);
       // Keep the partial response
-      if (currentStreamText) {
+      if (streamTextRef.current) {
         const partialMessage: ChatMessage = {
           id: `msg-${Date.now()}`,
           role: "assistant",
-          content: currentStreamText + "\n\n_(Interrompu)_",
+          content: streamTextRef.current + "\n\n_(Interrompu)_",
           timestamp: new Date(),
         };
         setMessages((msgs) => [...msgs, partialMessage]);
+        streamTextRef.current = "";
         setCurrentStreamText("");
       }
     }
-  }, [api, currentStreamText]);
+  }, [api]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     setActiveTools([]);
     setCurrentStreamText("");
+    streamTextRef.current = "";
+    hasAddedMessageRef.current = false;
   }, []);
 
   return {

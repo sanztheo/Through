@@ -105,7 +105,7 @@ export class ChatAgentService {
       }),
 
       writeFile: tool({
-        description: "Write content to a file in the project. Creates backup automatically.",
+        description: "Write ENTIRE content to a file. Use replaceInFile for small changes instead.",
         inputSchema: z.object({
           filePath: z.string().describe("Relative path to the file"),
           content: z.string().describe("The new file content"),
@@ -137,6 +137,54 @@ export class ChatAgentService {
           } catch (error: any) {
             const result = { error: error.message };
             emitToolResult({ id: callId, name: "writeFile", result });
+            return result;
+          }
+        },
+      }),
+
+      replaceInFile: tool({
+        description: "Replace a specific block of code in a file. FASTER and SAFER than rewriting the whole file. Use this for modifications.",
+        inputSchema: z.object({
+          filePath: z.string().describe("Relative path to the file"),
+          search: z.string().describe("The EXACT existing code to replace (must match character-for-character including whitespace)"),
+          replace: z.string().describe("The new code to insert"),
+          explanation: z.string().describe("Why this change is being made"),
+        }),
+        execute: async ({ filePath, search, replace, explanation }) => {
+          const callId = `replace-${Date.now()}`;
+          emitToolCall({ id: callId, name: "replaceInFile", args: { filePath, explanation } });
+          
+          try {
+            const fullPath = path.join(projectPath, filePath);
+            const content = await fs.readFile(fullPath, "utf-8");
+            
+            // Normalize line endings
+            const normalizedContent = content.replace(/\r\n/g, "\n");
+            const normalizedSearch = search.replace(/\r\n/g, "\n");
+            
+            if (!normalizedContent.includes(normalizedSearch)) {
+              const result = { 
+                success: false, 
+                error: "Code block not found. Ensure 'search' matches EXACTLY the existing code including indentation. Use readFile to verify." 
+              };
+              emitToolResult({ id: callId, name: "replaceInFile", result });
+              return result;
+            }
+            
+            // Create backup
+            const backupPath = fullPath + ".chat-backup";
+            await fs.writeFile(backupPath, content, "utf-8");
+            
+            // Perform replacement
+            const newContent = normalizedContent.replace(normalizedSearch, replace);
+            await fs.writeFile(fullPath, newContent, "utf-8");
+            
+            const result = { success: true, filePath, explanation, backupPath };
+            emitToolResult({ id: callId, name: "replaceInFile", result });
+            return result;
+          } catch (error: any) {
+            const result = { error: error.message };
+            emitToolResult({ id: callId, name: "replaceInFile", result });
             return result;
           }
         },
@@ -323,17 +371,27 @@ CAPACITÉS:
 - Rechercher dans le code source
 - Explorer la structure du projet
 
-RÈGLES:
+TOOLS DISPONIBLES:
+- readFile: Lire le contenu d'un fichier
+- replaceInFile: Remplacer un bloc de code spécifique (PRÉFÉRÉ pour les modifications)
+- writeFile: Réécrire un fichier entier (utiliser seulement pour créer ou réécrire complètement)
+- searchInProject: Rechercher du texte dans les fichiers
+- listFiles: Lister les fichiers d'un répertoire
+- createFile: Créer un nouveau fichier
+- deleteFile: Supprimer un fichier
+
+RÈGLES IMPORTANTES:
 1. Toujours lire un fichier AVANT de le modifier
-2. Expliquer clairement chaque modification
-3. Ne jamais modifier node_modules ou fichiers de config cachés
-4. Créer des backups automatiquement
+2. Utiliser replaceInFile pour les modifications (plus rapide et sûr)
+3. N'utiliser writeFile que pour créer un nouveau fichier ou réécriture complète
+4. Ne jamais modifier node_modules ou fichiers cachés
+5. Expliquer clairement chaque modification
 
 WORKFLOW TYPIQUE:
 1. Comprendre la demande
-2. Explorer/rechercher les fichiers pertinents  
-3. Lire le fichier cible
-4. Effectuer la modification
+2. Rechercher/explorer les fichiers pertinents
+3. Lire le fichier cible avec readFile
+4. Modifier avec replaceInFile (copier exactement le code à remplacer)
 5. Confirmer le changement
 
 Réponds en français sauf si l'utilisateur parle anglais.`;

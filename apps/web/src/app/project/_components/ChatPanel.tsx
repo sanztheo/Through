@@ -19,6 +19,7 @@ interface ChatPanelProps {
 const toolIcons: Record<string, string> = {
   readFile: "📖",
   writeFile: "✏️",
+  replaceInFile: "🔄",
   searchInProject: "🔍",
   listFiles: "📂",
   createFile: "📄",
