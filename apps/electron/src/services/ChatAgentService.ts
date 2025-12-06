@@ -840,15 +840,57 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
       // Check if extended thinking is enabled
       const modelInfo = getModelInfo();
       console.log("🧠 Extended Thinking enabled:", modelInfo.extendedThinking);
-      console.log("📊 Model:", modelInfo.model?.name, "| Supports thinking:", modelInfo.model?.supportsThinking);
+      console.log("📊 Model:", modelInfo.model?.name, "| Provider:", modelInfo.model?.provider, "| Supports thinking:", modelInfo.model?.supportsThinking);
 
-      const response = streamText({
+      // Build streamText options
+      const streamOptions: any = {
         model,
         messages: aiMessages,
         tools,
         stopWhen: stepCountIs(25),
         abortSignal: this.abortController.signal,
-      });
+      };
+
+      // Add extended thinking based on provider
+      if (modelInfo.extendedThinking && modelInfo.model?.supportsThinking) {
+        const provider = modelInfo.model.provider;
+        
+        if (provider === "anthropic") {
+          // Anthropic: Use thinking with budget
+          streamOptions.providerOptions = {
+            anthropic: {
+              thinking: {
+                type: "enabled",
+                budgetTokens: 10000,
+              },
+            },
+          };
+          console.log("🧠 Anthropic thinking mode ACTIVATED with 10k token budget");
+        } 
+        else if (provider === "openai") {
+          // OpenAI: Use reasoningEffort for o1/o3/o4 models
+          streamOptions.providerOptions = {
+            openai: {
+              reasoningEffort: "medium", // 'low', 'medium', or 'high'
+              reasoningSummary: "auto",  // 'auto' or 'detailed'
+            },
+          };
+          console.log("🧠 OpenAI reasoning mode ACTIVATED (medium effort)");
+        }
+        else if (provider === "google") {
+          // Google: thinking config if supported
+          streamOptions.providerOptions = {
+            google: {
+              thinkingConfig: {
+                thinkingBudget: 10000,
+              },
+            },
+          };
+          console.log("🧠 Google thinking mode ACTIVATED with 10k token budget");
+        }
+      }
+
+      const response = streamText(streamOptions);
 
       // Use fullStream to capture reasoning/thinking
       for await (const part of response.fullStream) {
