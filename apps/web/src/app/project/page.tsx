@@ -318,8 +318,7 @@ function ProjectContent() {
         {/* Chat Panel */}
         {showChat && (
           <ChatPanel
-            messages={chatAgent.messages}
-            activeTools={chatAgent.activeTools}
+            timeline={chatAgent.timeline}
             isStreaming={chatAgent.isStreaming}
             currentStreamText={chatAgent.currentStreamText}
             onSendMessage={chatAgent.sendMessage}

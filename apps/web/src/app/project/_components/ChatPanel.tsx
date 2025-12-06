@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { X, Send, Square, Trash2, Loader2 } from "lucide-react";
-import type { ChatMessage, ActiveToolCall } from "../_hooks/useChatAgent";
+import { X, Send, Square, Trash2, Loader2, ChevronDown, ChevronRight } from "lucide-react";
+import type { TimelineItem } from "../_hooks/useChatAgent";
 
 interface ChatPanelProps {
-  messages: ChatMessage[];
-  activeTools: ActiveToolCall[];
+  timeline: TimelineItem[];
   isStreaming: boolean;
   currentStreamText: string;
   onSendMessage: (content: string) => void;
@@ -26,7 +25,7 @@ const toolIcons: Record<string, string> = {
   deleteFile: "🗑️",
 };
 
-// Simple markdown parser (no external dependencies)
+// Simple markdown parser
 function SimpleMarkdown({ content }: { content: string }) {
   const parsed = useMemo(() => {
     const lines = content.split("\n");
@@ -41,9 +40,7 @@ function SimpleMarkdown({ content }: { content: string }) {
       let remaining = text;
       let key = 0;
 
-      // Process inline formatting
       while (remaining.length > 0) {
-        // Code inline `code`
         const codeMatch = remaining.match(/^`([^`]+)`/);
         if (codeMatch) {
           parts.push(
@@ -55,7 +52,6 @@ function SimpleMarkdown({ content }: { content: string }) {
           continue;
         }
 
-        // Bold **text**
         const boldMatch = remaining.match(/^\*\*([^*]+)\*\*/);
         if (boldMatch) {
           parts.push(<strong key={key++} className="font-semibold">{boldMatch[1]}</strong>);
@@ -63,7 +59,6 @@ function SimpleMarkdown({ content }: { content: string }) {
           continue;
         }
 
-        // Italic *text*
         const italicMatch = remaining.match(/^\*([^*]+)\*/);
         if (italicMatch) {
           parts.push(<em key={key++}>{italicMatch[1]}</em>);
@@ -71,7 +66,6 @@ function SimpleMarkdown({ content }: { content: string }) {
           continue;
         }
 
-        // Regular text until next special char
         const nextSpecial = remaining.search(/[`*]/);
         if (nextSpecial === -1) {
           parts.push(remaining);
@@ -84,7 +78,6 @@ function SimpleMarkdown({ content }: { content: string }) {
           remaining = remaining.slice(nextSpecial);
         }
       }
-
       return parts;
     };
 
@@ -102,7 +95,6 @@ function SimpleMarkdown({ content }: { content: string }) {
     };
 
     lines.forEach((line, index) => {
-      // Code block
       if (line.startsWith("```")) {
         if (inCodeBlock) {
           elements.push(
@@ -124,62 +116,41 @@ function SimpleMarkdown({ content }: { content: string }) {
         return;
       }
 
-      // Headers
       if (line.startsWith("### ")) {
         flushList();
-        elements.push(
-          <h3 key={`h3-${index}`} className="text-sm font-bold mb-1">
-            {parseInline(line.slice(4))}
-          </h3>
-        );
+        elements.push(<h3 key={`h3-${index}`} className="text-sm font-bold mb-1">{parseInline(line.slice(4))}</h3>);
         return;
       }
       if (line.startsWith("## ")) {
         flushList();
-        elements.push(
-          <h2 key={`h2-${index}`} className="text-base font-bold mb-2">
-            {parseInline(line.slice(3))}
-          </h2>
-        );
+        elements.push(<h2 key={`h2-${index}`} className="text-base font-bold mb-2">{parseInline(line.slice(3))}</h2>);
         return;
       }
       if (line.startsWith("# ")) {
         flushList();
-        elements.push(
-          <h1 key={`h1-${index}`} className="text-lg font-bold mb-2">
-            {parseInline(line.slice(2))}
-          </h1>
-        );
+        elements.push(<h1 key={`h1-${index}`} className="text-lg font-bold mb-2">{parseInline(line.slice(2))}</h1>);
         return;
       }
 
-      // List items
       const listMatch = line.match(/^[-*]\s+(.+)/);
       if (listMatch) {
         listItems.push(listMatch[1]);
         return;
       }
 
-      // Numbered list
       const numListMatch = line.match(/^\d+\.\s+(.+)/);
       if (numListMatch) {
         listItems.push(numListMatch[1]);
         return;
       }
 
-      // Empty line
       if (line.trim() === "") {
         flushList();
         return;
       }
 
-      // Regular paragraph
       flushList();
-      elements.push(
-        <p key={`p-${index}`} className="mb-2 last:mb-0">
-          {parseInline(line)}
-        </p>
-      );
+      elements.push(<p key={`p-${index}`} className="mb-2 last:mb-0">{parseInline(line)}</p>);
     });
 
     flushList();
@@ -189,9 +160,102 @@ function SimpleMarkdown({ content }: { content: string }) {
   return <>{parsed}</>;
 }
 
+// Expandable Tool Card Component
+function ToolCard({ item }: { item: TimelineItem & { type: "tool-call" } }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const getStatusColor = () => {
+    switch (item.status) {
+      case "running": return "bg-yellow-50 border-yellow-300";
+      case "completed": return "bg-green-50 border-green-300";
+      case "error": return "bg-red-50 border-red-300";
+      default: return "bg-gray-50 border-gray-300";
+    }
+  };
+
+  const formatValue = (value: any): string => {
+    if (typeof value === "string") {
+      // Truncate long strings
+      if (value.length > 200) {
+        return value.substring(0, 200) + "...";
+      }
+      return value;
+    }
+    return JSON.stringify(value, null, 2);
+  };
+
+  return (
+    <div className={`rounded-lg border ${getStatusColor()} overflow-hidden`}>
+      {/* Header - clickable */}
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-black/5 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-gray-500" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-gray-500" />
+        )}
+        <span className="text-lg">{toolIcons[item.name] || "🔧"}</span>
+        <span className="font-medium text-gray-900">{item.name}</span>
+        {item.args.filePath && (
+          <span className="text-gray-600 truncate text-xs flex-1 text-left">
+            {item.args.filePath}
+          </span>
+        )}
+        {item.status === "running" && (
+          <Loader2 className="w-4 h-4 animate-spin text-yellow-600" />
+        )}
+        {item.status === "completed" && (
+          <span className="text-green-600 font-bold">✓</span>
+        )}
+        {item.status === "error" && (
+          <span className="text-red-600 font-bold">✗</span>
+        )}
+      </button>
+
+      {/* Expanded details */}
+      {expanded && (
+        <div className="border-t border-current/10 px-3 py-2 bg-white/50 space-y-2">
+          {/* Arguments */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 mb-1">Arguments:</p>
+            <div className="bg-gray-100 rounded p-2 text-xs font-mono overflow-x-auto">
+              {Object.entries(item.args).map(([key, value]) => (
+                <div key={key} className="mb-1 last:mb-0">
+                  <span className="text-blue-600">{key}:</span>{" "}
+                  <span className="text-gray-800 whitespace-pre-wrap">{formatValue(value)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Result */}
+          {item.result && (
+            <div>
+              <p className="text-xs font-semibold text-gray-500 mb-1">Résultat:</p>
+              <div className="bg-gray-100 rounded p-2 text-xs font-mono overflow-x-auto">
+                {typeof item.result === "object" ? (
+                  Object.entries(item.result).map(([key, value]) => (
+                    <div key={key} className="mb-1 last:mb-0">
+                      <span className="text-green-600">{key}:</span>{" "}
+                      <span className="text-gray-800 whitespace-pre-wrap">{formatValue(value)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <span className="text-gray-800">{formatValue(item.result)}</span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatPanel({
-  messages,
-  activeTools,
+  timeline,
   isStreaming,
   currentStreamText,
   onSendMessage,
@@ -206,7 +270,7 @@ export function ChatPanel({
   // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, currentStreamText, activeTools]);
+  }, [timeline, currentStreamText]);
 
   // Focus input on mount
   useEffect(() => {
@@ -228,11 +292,11 @@ export function ChatPanel({
   };
 
   return (
-    <div className="w-[380px] h-full flex flex-col bg-white border-l border-gray-200 shadow-lg">
+    <div className="w-[400px] h-full flex flex-col bg-white border-l border-gray-200 shadow-lg">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+          <div className={`w-2 h-2 rounded-full ${isStreaming ? "bg-yellow-500 animate-pulse" : "bg-green-500"}`} />
           <h2 className="font-semibold text-gray-800">Assistant IA</h2>
         </div>
         <div className="flex items-center gap-1">
@@ -253,77 +317,57 @@ export function ChatPanel({
         </div>
       </div>
 
-      {/* Messages Area */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && !isStreaming && activeTools.length === 0 && (
+      {/* Timeline Area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {timeline.length === 0 && !isStreaming && (
           <div className="text-center text-gray-400 py-12">
             <p className="text-sm">Commencez une conversation</p>
             <p className="text-xs mt-2">
-              Ex: "Liste les fichiers dans src" ou "Modifie le bouton principal"
+              Ex: "Modifie le style du bouton" ou "Ajoute une animation"
             </p>
           </div>
         )}
 
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-          >
-            <div
-              className={`max-w-[85%] rounded-lg px-3 py-2 ${
-                msg.role === "user"
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-800"
-              }`}
-            >
-              {msg.role === "user" ? (
-                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-              ) : (
-                <div className="text-sm">
-                  <SimpleMarkdown content={msg.content} />
-                </div>
-              )}
-              <span className="text-[10px] opacity-60 mt-1 block">
-                {msg.timestamp.toLocaleTimeString("fr-FR", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
-              </span>
-            </div>
-          </div>
-        ))}
-
-        {/* Active Tool Calls */}
-        {activeTools.length > 0 && (
-          <div className="space-y-2">
-            {activeTools.map((tool) => (
-              <div
-                key={tool.id}
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm ${
-                  tool.status === "running"
-                    ? "bg-yellow-50 border border-yellow-200"
-                    : tool.status === "completed"
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
-                }`}
-              >
-                <span>{toolIcons[tool.name] || "🔧"}</span>
-                <span className="font-medium text-gray-900">{tool.name}</span>
-                {tool.args.filePath && (
-                  <span className="text-gray-700 truncate text-xs">
-                    {tool.args.filePath}
+        {/* Render timeline items chronologically */}
+        {timeline.map((item) => {
+          if (item.type === "user-message") {
+            return (
+              <div key={item.id} className="flex justify-end">
+                <div className="max-w-[85%] rounded-lg px-3 py-2 bg-blue-600 text-white">
+                  <p className="text-sm whitespace-pre-wrap">{item.content}</p>
+                  <span className="text-[10px] opacity-60 mt-1 block">
+                    {item.timestamp.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
                   </span>
-                )}
-                {tool.status === "running" && (
-                  <Loader2 className="w-3 h-3 animate-spin ml-auto text-yellow-600" />
-                )}
-                {tool.status === "completed" && (
-                  <span className="ml-auto text-green-600 text-xs">✓</span>
-                )}
+                </div>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          }
+
+          if (item.type === "assistant-message") {
+            return (
+              <div key={item.id} className="flex justify-start">
+                <div className="max-w-[85%] rounded-lg px-3 py-2 bg-gray-100 text-gray-800">
+                  <div className="text-sm">
+                    <SimpleMarkdown content={item.content} />
+                  </div>
+                  <span className="text-[10px] opacity-60 mt-1 block">
+                    {item.timestamp.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
+          if (item.type === "tool-call") {
+            return (
+              <div key={item.id} className="mx-2">
+                <ToolCard item={item} />
+              </div>
+            );
+          }
+
+          return null;
+        })}
 
         {/* Streaming Response */}
         {isStreaming && currentStreamText && (
@@ -337,8 +381,8 @@ export function ChatPanel({
           </div>
         )}
 
-        {/* Loading indicator when no text yet */}
-        {isStreaming && !currentStreamText && activeTools.length === 0 && (
+        {/* Loading indicator */}
+        {isStreaming && !currentStreamText && timeline.length > 0 && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
               <Loader2 className="w-4 h-4 animate-spin text-blue-500" />

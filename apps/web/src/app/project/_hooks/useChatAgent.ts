@@ -2,20 +2,11 @@
 
 import { useState, useCallback, useEffect, useRef } from "react";
 
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: Date;
-}
-
-export interface ActiveToolCall {
-  id: string;
-  name: string;
-  args: Record<string, any>;
-  status: "running" | "completed" | "error";
-  result?: any;
-}
+// Unified timeline item types
+export type TimelineItem = 
+  | { type: "user-message"; id: string; content: string; timestamp: Date }
+  | { type: "assistant-message"; id: string; content: string; timestamp: Date }
+  | { type: "tool-call"; id: string; name: string; args: Record<string, any>; status: "running" | "completed" | "error"; result?: any; timestamp: Date };
 
 interface ElectronAPI {
   streamChat?: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<any>;
@@ -26,14 +17,13 @@ interface ElectronAPI {
 }
 
 export function useChatAgent(api: ElectronAPI | null, projectPath: string | null) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activeTools, setActiveTools] = useState<ActiveToolCall[]>([]);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamText, setCurrentStreamText] = useState("");
   
-  // Use ref to track stream text to avoid closure issues
+  // Refs to track state without closure issues
   const streamTextRef = useRef("");
-  const hasAddedMessageRef = useRef(false);
+  const currentMessageIdRef = useRef<string | null>(null);
   const listenersSetupRef = useRef(false);
 
   // Setup listeners only once when API becomes available
@@ -49,31 +39,48 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           streamTextRef.current += chunk.content;
           setCurrentStreamText(streamTextRef.current);
         } else if (chunk.type === "done") {
-          // Only add message once
-          if (!hasAddedMessageRef.current && streamTextRef.current) {
-            hasAddedMessageRef.current = true;
-            const assistantMessage: ChatMessage = {
-              id: `msg-${Date.now()}`,
-              role: "assistant",
-              content: streamTextRef.current,
-              timestamp: new Date(),
-            };
-            setMessages((msgs) => [...msgs, assistantMessage]);
+          // Finalize the current message if there's content
+          if (streamTextRef.current && currentMessageIdRef.current) {
+            const finalContent = streamTextRef.current;
+            const messageId = currentMessageIdRef.current;
+            
+            setTimeline((prev) => {
+              // Check if this message already exists
+              const exists = prev.some(item => item.id === messageId);
+              if (exists) {
+                // Update existing message
+                return prev.map(item => 
+                  item.id === messageId && item.type === "assistant-message"
+                    ? { ...item, content: finalContent }
+                    : item
+                );
+              } else {
+                // Add new message
+                return [...prev, {
+                  type: "assistant-message" as const,
+                  id: messageId,
+                  content: finalContent,
+                  timestamp: new Date(),
+                }];
+              }
+            });
           }
+          
           // Reset state
           streamTextRef.current = "";
+          currentMessageIdRef.current = null;
           setCurrentStreamText("");
           setIsStreaming(false);
         } else if (chunk.type === "error") {
-          const errorMessage: ChatMessage = {
-            id: `msg-${Date.now()}`,
-            role: "assistant",
+          setTimeline((prev) => [...prev, {
+            type: "assistant-message",
+            id: `error-${Date.now()}`,
             content: `❌ Erreur: ${chunk.content}`,
             timestamp: new Date(),
-          };
-          setMessages((msgs) => [...msgs, errorMessage]);
+          }]);
           setIsStreaming(false);
           streamTextRef.current = "";
+          currentMessageIdRef.current = null;
           setCurrentStreamText("");
         }
       });
@@ -82,26 +89,56 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     // Listen for tool calls
     if (api.onChatToolCall) {
       api.onChatToolCall((toolCall) => {
-        setActiveTools((tools) => [
-          ...tools,
-          {
-            id: toolCall.id,
-            name: toolCall.name,
-            args: toolCall.args,
-            status: "running",
-          },
-        ]);
+        // First, save any pending text as a message
+        if (streamTextRef.current) {
+          const pendingText = streamTextRef.current;
+          const messageId = currentMessageIdRef.current || `msg-${Date.now()}`;
+          
+          setTimeline((prev) => {
+            const exists = prev.some(item => item.id === messageId);
+            if (!exists) {
+              return [...prev, {
+                type: "assistant-message" as const,
+                id: messageId,
+                content: pendingText,
+                timestamp: new Date(),
+              }];
+            }
+            return prev.map(item =>
+              item.id === messageId && item.type === "assistant-message"
+                ? { ...item, content: pendingText }
+                : item
+            );
+          });
+          
+          // Reset for next message segment
+          streamTextRef.current = "";
+          setCurrentStreamText("");
+        }
+        
+        // Add the tool call to timeline
+        setTimeline((prev) => [...prev, {
+          type: "tool-call",
+          id: toolCall.id,
+          name: toolCall.name,
+          args: toolCall.args,
+          status: "running",
+          timestamp: new Date(),
+        }]);
+        
+        // Prepare for new message after tool
+        currentMessageIdRef.current = `msg-${Date.now()}`;
       });
     }
 
     // Listen for tool results
     if (api.onChatToolResult) {
       api.onChatToolResult((result) => {
-        setActiveTools((tools) =>
-          tools.map((t) =>
-            t.id === result.id
-              ? { ...t, status: "completed" as const, result: result.result }
-              : t
+        setTimeline((prev) =>
+          prev.map((item) =>
+            item.type === "tool-call" && item.id === result.id
+              ? { ...item, status: "completed" as const, result: result.result }
+              : item
           )
         );
       });
@@ -117,70 +154,72 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     async (content: string) => {
       if (!api?.streamChat || !projectPath || !content.trim()) return;
 
-      // Reset refs for new message
+      // Reset refs for new conversation turn
       streamTextRef.current = "";
-      hasAddedMessageRef.current = false;
+      currentMessageIdRef.current = `msg-${Date.now()}`;
 
-      // Add user message
-      const userMessage: ChatMessage = {
-        id: `msg-${Date.now()}`,
-        role: "user",
+      // Add user message to timeline
+      setTimeline((prev) => [...prev, {
+        type: "user-message",
+        id: `user-${Date.now()}`,
         content: content.trim(),
         timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, userMessage]);
+      }]);
 
       // Clear previous stream state
       setCurrentStreamText("");
-      setActiveTools([]);
       setIsStreaming(true);
 
-      // Build messages for API
-      const apiMessages = [...messages, userMessage].map((m) => ({
-        role: m.role,
-        content: m.content,
-      }));
+      // Build messages for API from timeline
+      const messages = timeline
+        .filter(item => item.type === "user-message" || item.type === "assistant-message")
+        .map(item => ({
+          role: item.type === "user-message" ? "user" : "assistant",
+          content: item.content,
+        }));
+      
+      // Add current user message
+      messages.push({ role: "user", content: content.trim() });
 
       try {
-        await api.streamChat(projectPath, apiMessages);
+        await api.streamChat(projectPath, messages);
       } catch (error: any) {
         console.error("Chat error:", error);
         setIsStreaming(false);
       }
     },
-    [api, projectPath, messages]
+    [api, projectPath, timeline]
   );
 
   const abort = useCallback(async () => {
     if (api?.abortChat) {
       await api.abortChat();
       setIsStreaming(false);
-      // Keep the partial response
+      
+      // Keep any partial response
       if (streamTextRef.current) {
-        const partialMessage: ChatMessage = {
-          id: `msg-${Date.now()}`,
-          role: "assistant",
+        setTimeline((prev) => [...prev, {
+          type: "assistant-message",
+          id: `partial-${Date.now()}`,
           content: streamTextRef.current + "\n\n_(Interrompu)_",
           timestamp: new Date(),
-        };
-        setMessages((msgs) => [...msgs, partialMessage]);
+        }]);
         streamTextRef.current = "";
+        currentMessageIdRef.current = null;
         setCurrentStreamText("");
       }
     }
   }, [api]);
 
   const clearHistory = useCallback(() => {
-    setMessages([]);
-    setActiveTools([]);
+    setTimeline([]);
     setCurrentStreamText("");
     streamTextRef.current = "";
-    hasAddedMessageRef.current = false;
+    currentMessageIdRef.current = null;
   }, []);
 
   return {
-    messages,
-    activeTools,
+    timeline,
     isStreaming,
     currentStreamText,
     sendMessage,
