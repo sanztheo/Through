@@ -1208,7 +1208,7 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
           streamOptions.providerOptions = {
             openai: {
               reasoningEffort: "medium", // 'low', 'medium', or 'high'
-              reasoningSummary: "auto",  // 'auto' or 'detailed'
+              // reasoningSummary: "auto",  // Requires verified organization
             },
           };
           console.log("🧠 OpenAI reasoning mode ACTIVATED (medium effort)");
