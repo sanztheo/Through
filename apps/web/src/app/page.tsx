@@ -168,7 +168,7 @@ export default function HomePage() {
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-500">
             <button className="hover:text-gray-700 transition-colors">
-              Business
+              Mde by Sanz Theo
             </button>
             <span>·</span>
             <button 
