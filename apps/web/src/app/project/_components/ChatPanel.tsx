@@ -296,10 +296,23 @@ function ThinkingCard({ content, isStreaming }: { content: string; isStreaming?:
         )}
       </button>
       {expanded && (
-        <div className="border-t border-purple-200 px-3 py-2 bg-purple-25">
-          <p className="text-xs text-purple-700 italic whitespace-pre-wrap">
-            {content || "..."}
-          </p>
+        <div className="border-t border-purple-200 px-3 py-2 bg-white/50 max-h-48 overflow-y-auto">
+          {content ? (
+            <p className="text-xs text-purple-700 italic whitespace-pre-wrap">
+              {content}
+            </p>
+          ) : isStreaming ? (
+            <div className="flex items-center gap-2 text-purple-500">
+              <span className="text-xs italic">En train de réfléchir</span>
+              <span className="flex gap-1">
+                <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+            </div>
+          ) : (
+            <p className="text-xs text-purple-400 italic">Pas de réflexion</p>
+          )}
         </div>
       )}
     </div>
@@ -430,8 +443,8 @@ export function ChatPanel({
         })}
 
         {/* Current Thinking (streaming) */}
-        {isThinking && currentThinkingText && (
-          <ThinkingCard content={currentThinkingText} isStreaming={true} />
+        {isThinking && (
+          <ThinkingCard content={currentThinkingText || ""} isStreaming={true} />
         )}
 
         {/* Streaming Response */}

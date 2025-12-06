@@ -42,6 +42,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       api.onChatChunk((chunk) => {
         // Handle reasoning/thinking
         if (chunk.type === "reasoning-start") {
+          console.log("🧠 Frontend: REASONING START");
           setIsThinking(true);
           thinkingTextRef.current = "";
           currentThinkingIdRef.current = `thinking-${Date.now()}`;
@@ -50,15 +51,27 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           thinkingTextRef.current += chunk.content;
           setCurrentThinkingText(thinkingTextRef.current);
         } else if (chunk.type === "reasoning-end") {
-          // Save thinking to timeline
-          if (thinkingTextRef.current && currentThinkingIdRef.current) {
+          // Capture the final content before any state changes
+          const finalThinkingContent = thinkingTextRef.current;
+          const thinkingId = currentThinkingIdRef.current;
+          
+          console.log("🧠 Frontend: REASONING END");
+          console.log("🧠 Frontend: Content length:", finalThinkingContent.length);
+          console.log("🧠 Frontend: Content preview:", finalThinkingContent.substring(0, 100));
+          
+          // Save thinking to timeline with captured content
+          if (finalThinkingContent && thinkingId) {
             setTimeline((prev) => [...prev, {
               type: "thinking" as const,
-              id: currentThinkingIdRef.current!,
-              content: thinkingTextRef.current,
+              id: thinkingId,
+              content: finalThinkingContent,
               timestamp: new Date(),
             }]);
+            console.log("🧠 Frontend: Added thinking to timeline");
+          } else {
+            console.log("🧠 Frontend: No content to save!");
           }
+          
           setIsThinking(false);
           thinkingTextRef.current = "";
           currentThinkingIdRef.current = null;
