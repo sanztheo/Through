@@ -4,7 +4,7 @@
  */
 import { streamText, tool, stepCountIs } from "ai";
 import { BrowserWindow } from "electron";
-import { getModel } from "./settings.js";
+import { getModel, getModelInfo } from "./settings.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { glob } from "glob";
@@ -837,6 +837,11 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
         })),
       ];
 
+      // Check if extended thinking is enabled
+      const modelInfo = getModelInfo();
+      console.log("🧠 Extended Thinking enabled:", modelInfo.extendedThinking);
+      console.log("📊 Model:", modelInfo.model?.name, "| Supports thinking:", modelInfo.model?.supportsThinking);
+
       const response = streamText({
         model,
         messages: aiMessages,
@@ -849,16 +854,24 @@ Réponds en français sauf si l'utilisateur parle anglais.`;
       for await (const part of response.fullStream) {
         if (this.abortController?.signal.aborted) break;
         
+        // Log all event types for debugging
+        if (part.type.includes("reasoning")) {
+          console.log("🧠 Reasoning event:", part.type, part);
+        }
+        
         switch (part.type) {
           case "reasoning-start":
+            console.log("🧠 REASONING START");
             this.emitChunk({ type: "reasoning-start" });
             break;
           case "reasoning-delta":
             if (part.text) {
+              console.log("🧠 REASONING:", part.text.substring(0, 50) + "...");
               this.emitChunk({ type: "reasoning", content: part.text });
             }
             break;
           case "reasoning-end":
+            console.log("🧠 REASONING END");
             this.emitChunk({ type: "reasoning-end" });
             break;
           case "text-delta":
