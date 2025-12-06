@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Sparkles, Check, Folder, Settings } from "lucide-react";
+import { X, Check, Folder, Settings, Brain } from "lucide-react";
 
 interface ModelInfo {
   id: string;
@@ -10,6 +10,7 @@ interface ModelInfo {
   inputPrice: number;
   outputPrice: number;
   description: string;
+  supportsThinking?: boolean;
 }
 
 interface SettingsModalProps {
@@ -22,8 +23,13 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [defaultClonePath, setDefaultClonePath] = useState<string>("");
+  const [extendedThinking, setExtendedThinking] = useState<boolean>(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+
+  // Get the selected model info
+  const selectedModelInfo = models.find(m => m.id === selectedModel);
+  const supportsThinking = selectedModelInfo?.supportsThinking || false;
 
   useEffect(() => {
     if (isOpen && api?.getSettings) {
@@ -38,6 +44,7 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
       setModels(result.models);
       setSelectedModel(result.settings.aiModel);
       setDefaultClonePath(result.settings.defaultClonePath || "");
+      setExtendedThinking(result.settings.extendedThinking || false);
     } catch (error) {
       console.error("Failed to load settings:", error);
     } finally {
@@ -53,6 +60,14 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
     }
   };
 
+  const handleModelSelect = (modelId: string) => {
+    setSelectedModel(modelId);
+    const model = models.find(m => m.id === modelId);
+    if (!model?.supportsThinking) {
+      setExtendedThinking(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!api?.setSettings) return;
     
@@ -61,6 +76,7 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
       await api.setSettings({ 
         aiModel: selectedModel,
         defaultClonePath: defaultClonePath,
+        extendedThinking: supportsThinking ? extendedThinking : false,
       });
       onClose();
     } catch (error) {
@@ -103,7 +119,7 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 overflow-y-auto flex-1">
           {/* Clone Path Section */}
           <div>
             <h3 className="text-sm font-medium text-gray-700 mb-3">
@@ -127,7 +143,7 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
               </button>
             </div>
             <p className="text-xs text-gray-400 mt-2">
-              Ce dossier sera pré-sélectionné lors du clonage d'un repository.
+              Ce dossier sera pré-sélectionné lors du clonage.
             </p>
           </div>
 
@@ -137,52 +153,88 @@ export function SettingsModal({ isOpen, onClose, api }: SettingsModalProps) {
               AI Model
             </h3>
 
-          {loading ? (
-            <div className="text-center py-8 text-gray-500">Loading...</div>
-          ) : (
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {models.map((model) => (
-                <button
-                  key={model.id}
-                  onClick={() => setSelectedModel(model.id)}
-                  className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
-                    selectedModel === model.id
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-gray-900">
-                        {model.name}
+            {/* Extended Thinking Toggle - shows when a thinking model is selected */}
+            {supportsThinking && (
+              <div className="mb-4 p-3 rounded-lg border border-purple-200 bg-purple-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Brain className="w-5 h-5 text-purple-600" />
+                    <div>
+                      <h4 className="text-sm font-medium text-purple-900">Extended Thinking</h4>
+                      <p className="text-xs text-purple-600">
+                        Afficher le raisonnement du modèle
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setExtendedThinking(!extendedThinking)}
+                    className={`relative w-12 h-6 rounded-full transition-colors ${
+                      extendedThinking ? "bg-purple-500" : "bg-gray-300"
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                        extendedThinking ? "translate-x-7" : "translate-x-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Model List */}
+            {loading ? (
+              <div className="text-center py-8 text-gray-500">Loading...</div>
+            ) : (
+              <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                {models.map((model) => (
+                  <button
+                    key={model.id}
+                    onClick={() => handleModelSelect(model.id)}
+                    className={`w-full p-4 rounded-lg border-2 text-left transition-all ${
+                      selectedModel === model.id
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-gray-900">
+                          {model.name}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded text-xs font-medium ${getProviderColor(
+                            model.provider
+                          )}`}
+                        >
+                          {model.provider}
+                        </span>
+                        {model.supportsThinking && (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 flex items-center gap-1">
+                            <Brain className="w-3 h-3" />
+                            Thinking
+                          </span>
+                        )}
+                      </div>
+                      {selectedModel === model.id && (
+                        <Check className="w-5 h-5 text-blue-500" />
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500 mb-2">
+                      {model.description}
+                    </p>
+                    <div className="flex gap-4 text-xs text-gray-400">
+                      <span>
+                        Input: <span className="text-gray-600">${model.inputPrice}/M</span>
                       </span>
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${getProviderColor(
-                          model.provider
-                        )}`}
-                      >
-                        {model.provider}
+                      <span>
+                        Output: <span className="text-gray-600">${model.outputPrice}/M</span>
                       </span>
                     </div>
-                    {selectedModel === model.id && (
-                      <Check className="w-5 h-5 text-blue-500" />
-                    )}
-                  </div>
-                  <p className="text-sm text-gray-500 mb-2">
-                    {model.description}
-                  </p>
-                  <div className="flex gap-4 text-xs text-gray-400">
-                    <span>
-                      Input: <span className="text-gray-600">${model.inputPrice}/M</span>
-                    </span>
-                    <span>
-                      Output: <span className="text-gray-600">${model.outputPrice}/M</span>
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

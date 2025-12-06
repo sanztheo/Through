@@ -71,7 +71,7 @@ export function registerAgentHandlers() {
   });
 
   // Save settings
-  ipcMain.handle("settings:set", async (event, settings: { aiModel?: string }) => {
+  ipcMain.handle("settings:set", async (event, settings: { aiModel?: string; defaultClonePath?: string; extendedThinking?: boolean }) => {
     return saveSettings(settings);
   });
 

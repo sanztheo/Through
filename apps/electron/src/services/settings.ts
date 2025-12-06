@@ -5,11 +5,13 @@ import { app } from "electron";
 export interface AppSettings {
   aiModel: string;
   defaultClonePath: string;
+  extendedThinking: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  aiModel: "gpt-5-mini", // Default to cheapest
-  defaultClonePath: "", // Empty = ask each time
+  aiModel: "gpt-4o-mini",
+  defaultClonePath: "",
+  extendedThinking: false,
 };
 
 function getSettingsPath(): string {
@@ -43,7 +45,7 @@ export function saveSettings(settings: Partial<AppSettings>): AppSettings {
   }
 }
 
-// Model definitions with pricing (using ACTUAL API model IDs)
+// Model definitions with pricing and extended thinking support
 export const AI_MODELS = [
   {
     id: "claude-opus-4.5",
@@ -53,6 +55,7 @@ export const AI_MODELS = [
     inputPrice: 5,
     outputPrice: 25,
     description: "Most intelligent, best for complex coding",
+    supportsThinking: true,
   },
   {
     id: "claude-sonnet-4.5",
@@ -62,6 +65,7 @@ export const AI_MODELS = [
     inputPrice: 3,
     outputPrice: 15,
     description: "Agentic coding, design quality",
+    supportsThinking: true,
   },
   {
     id: "claude-sonnet-4",
@@ -71,6 +75,7 @@ export const AI_MODELS = [
     inputPrice: 3,
     outputPrice: 15,
     description: "Fast, great for coding",
+    supportsThinking: false,
   },
   {
     id: "claude-3-5-haiku",
@@ -80,6 +85,7 @@ export const AI_MODELS = [
     inputPrice: 0.25,
     outputPrice: 1.25,
     description: "Fast and cheap",
+    supportsThinking: false,
   },
   {
     id: "gemini-2.0-flash",
@@ -89,6 +95,7 @@ export const AI_MODELS = [
     inputPrice: 0.1,
     outputPrice: 0.4,
     description: "Fast, multimodal",
+    supportsThinking: false,
   },
   {
     id: "gpt-4o",
@@ -98,6 +105,7 @@ export const AI_MODELS = [
     inputPrice: 2.5,
     outputPrice: 10,
     description: "Multimodal, fast",
+    supportsThinking: false,
   },
   {
     id: "gpt-4o-mini",
@@ -107,6 +115,7 @@ export const AI_MODELS = [
     inputPrice: 0.15,
     outputPrice: 0.6,
     description: "Very cheap, good for simple tasks",
+    supportsThinking: false,
   },
   {
     id: "o4-mini",
@@ -116,6 +125,7 @@ export const AI_MODELS = [
     inputPrice: 1.1,
     outputPrice: 4.4,
     description: "🧠 Reasoning model, good for complex tasks",
+    supportsThinking: true,
   },
   {
     id: "o3",
@@ -125,6 +135,7 @@ export const AI_MODELS = [
     inputPrice: 10,
     outputPrice: 40,
     description: "🧠 Most powerful reasoning, expensive",
+    supportsThinking: true,
   },
   {
     id: "o3-mini",
@@ -134,6 +145,7 @@ export const AI_MODELS = [
     inputPrice: 1.1,
     outputPrice: 4.4,
     description: "🧠 Fast reasoning, cheaper than o3",
+    supportsThinking: true,
   },
   {
     id: "o1-preview",
@@ -143,6 +155,7 @@ export const AI_MODELS = [
     inputPrice: 15,
     outputPrice: 60,
     description: "🧠 Advanced reasoning (preview)",
+    supportsThinking: true,
   },
 ];
 
@@ -155,13 +168,10 @@ export function getModel() {
   const modelDef = AI_MODELS.find((m) => m.id === settings.aiModel);
   
   if (!modelDef) {
-    // Fallback
     console.warn("Model not found, using fallback:", settings.aiModel);
     return openai("gpt-4o-mini");
   }
 
-  // Handle specific model ID formats if necessary
-  // Vercel SDK generic providers usually take the model ID string directly
   switch (modelDef.provider) {
     case "anthropic":
       return anthropic(modelDef.modelId);
@@ -172,4 +182,13 @@ export function getModel() {
     default:
       return openai("gpt-4o-mini");
   }
+}
+
+export function getModelInfo() {
+  const settings = getSettings();
+  const modelDef = AI_MODELS.find((m) => m.id === settings.aiModel);
+  return {
+    model: modelDef,
+    extendedThinking: settings.extendedThinking && (modelDef?.supportsThinking || false),
+  };
 }
