@@ -7,6 +7,7 @@ import { registerFilesystemHandlers } from "./ipc/filesystem";
 import { registerBrowserViewHandlers } from "./ipc/browserview";
 import { registerAgentHandlers } from "./ipc/agent";
 import { registerGitHandlers } from "./ipc/git";
+import { registerChatHandlers } from "./ipc/chat";
 
 // Security configuration
 const SECURITY_CONFIG = {
@@ -102,6 +103,7 @@ app.whenReady().then(async () => {
     if (mainWindow) {
       registerBrowserViewHandlers(mainWindow);
       registerGitHandlers(mainWindow);
+      registerChatHandlers(mainWindow);
     }
   } catch (error) {
     console.error("Failed to initialize app:", error);

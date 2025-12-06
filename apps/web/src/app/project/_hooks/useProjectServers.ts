@@ -35,6 +35,18 @@ export function useProjectServers({
 
   const serverIdMapRef = useRef<Map<string, number>>(new Map());
 
+  // Sync servers state when commands change
+  useEffect(() => {
+    setServers(commands.map((cmd) => ({
+      id: "",
+      command: cmd,
+      status: "idle" as const,
+      logs: [],
+    })));
+    serverIdMapRef.current.clear();
+  }, [commands]);
+
+
   // Function to start all servers
   const startAllServers = useCallback(async () => {
     if (!api || !projectId) return;
@@ -311,6 +323,7 @@ export function useProjectServers({
     servers,
     setServers,
     commands,
+    setCommands,
     devToolsLogs,
     projectInfo,
     startAllServers,

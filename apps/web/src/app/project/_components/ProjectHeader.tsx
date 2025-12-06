@@ -12,6 +12,7 @@ import {
   RotateCw,
   MousePointerClick,
   MessageSquare,
+  Settings,
 } from "lucide-react";
 import { ServerInstance } from "../_types";
 import { EditorTab } from "@/components/editor";
@@ -29,6 +30,7 @@ interface ProjectHeaderProps {
   canGoForward: boolean;
   showTerminal: boolean;
   isInspecting: boolean;
+  showChat?: boolean;
   onBackToHome: () => void;
   onTabClick: (tabId: string) => void;
   onTabClose: (tabId: string) => void;
@@ -41,6 +43,8 @@ interface ProjectHeaderProps {
   onReload: () => void;
   onToggleTerminal: () => void;
   onToggleInspector: () => void;
+  onOpenSettings: () => void;
+  onToggleChat?: () => void;
   pendingModificationsCount?: number;
 }
 
@@ -57,6 +61,7 @@ export function ProjectHeader({
   canGoForward,
   showTerminal,
   isInspecting,
+  showChat,
   onBackToHome,
   onTabClick,
   onTabClose,
@@ -69,6 +74,8 @@ export function ProjectHeader({
   onReload,
   onToggleTerminal,
   onToggleInspector,
+  onOpenSettings,
+  onToggleChat,
   pendingModificationsCount = 0,
 }: ProjectHeaderProps) {
   const anyServerRunning = servers.some((s) => s.status === "running");
@@ -325,6 +332,26 @@ export function ProjectHeader({
             </span>
           )}
         </button>
+        <button
+          onClick={onOpenSettings}
+          className="p-1.5 rounded-md hover:bg-gray-100 text-gray-600 transition-colors"
+          title="Project Settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+        {onToggleChat && (
+          <button
+            onClick={onToggleChat}
+            className={`p-1.5 rounded-md transition-colors ${
+              showChat
+                ? "bg-blue-100 text-blue-600"
+                : "bg-white hover:bg-gray-100 text-gray-600"
+            }`}
+            title="Assistant IA"
+          >
+            <MessageSquare className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={onToggleTerminal}
           className={`p-1.5 rounded-md transition-colors ${

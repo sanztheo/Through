@@ -182,9 +182,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   streamChat: (projectPath: string, messages: Array<{ role: string; content: string }>) =>
     ipcRenderer.invoke("chat:stream", { projectPath, messages }),
   onChatChunk: (callback: (chunk: any) => void) => {
+    // Remove existing listeners first to prevent duplicates
+    ipcRenderer.removeAllListeners("chat:chunk");
     ipcRenderer.on("chat:chunk", (_, chunk) => callback(chunk));
     return () => ipcRenderer.removeAllListeners("chat:chunk");
   },
+  onChatToolCall: (callback: (toolCall: { id: string; name: string; args: any }) => void) => {
+    ipcRenderer.removeAllListeners("chat:tool-call");
+    ipcRenderer.on("chat:tool-call", (_, toolCall) => callback(toolCall));
+    return () => ipcRenderer.removeAllListeners("chat:tool-call");
+  },
+  onChatToolResult: (callback: (result: { id: string; name: string; result: any }) => void) => {
+    ipcRenderer.removeAllListeners("chat:tool-result");
+    ipcRenderer.on("chat:tool-result", (_, result) => callback(result));
+    return () => ipcRenderer.removeAllListeners("chat:tool-result");
+  },
+  abortChat: () => ipcRenderer.invoke("chat:abort"),
 
   // Git operations
   selectFolderForClone: () => ipcRenderer.invoke("git:select-folder"),

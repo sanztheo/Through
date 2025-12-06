@@ -11,9 +11,12 @@ import { useBrowserView } from "./_hooks/useBrowserView";
 import { useEditor } from "./_hooks/useEditor";
 import { useElementInspector } from "./_hooks/useElementInspector";
 import { useAgentModifications } from "./_hooks/useAgentModifications";
+import { useChatAgent } from "./_hooks/useChatAgent";
 import { ProjectHeader } from "./_components/ProjectHeader";
 import { ElementInspectorPanel } from "./_components/ElementInspectorPanel";
 import { PendingModificationsList } from "./_components/PendingModificationsList";
+import { ProjectSettingsModal } from "./_components/ProjectSettingsModal";
+import { ChatPanel } from "./_components/ChatPanel";
 
 function ProjectContent() {
   const router = useRouter();
@@ -25,11 +28,15 @@ function ProjectContent() {
 
   const [showTerminal, setShowTerminal] = useState(true);
   const [showInspectorPanel, setShowInspectorPanel] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [lastSyncRef, setLastSyncRef] = useState<HTMLElement | null>(null);
 
   // Custom hooks
   const {
     servers,
+    commands,
+    setCommands,
     devToolsLogs,
     startAllServers,
     restartServer,
@@ -73,6 +80,9 @@ function ProjectContent() {
     loadingCount,
   } = useAgentModifications(api, projectPath);
 
+  // Chat Agent
+  const chatAgent = useChatAgent(api, projectPath);
+
   const {
     browserViewReady,
     previewContainerRef,
@@ -92,6 +102,7 @@ function ProjectContent() {
     viewMode,
     firstRunningServer,
     showSidebar: showInspectorPanel,
+    modalOpen: showProjectSettings,
   });
 
   // Custom toggle that opens panel if there are pending modifications
@@ -126,6 +137,40 @@ function ProjectContent() {
     router.push("/");
   }, [api, router]);
 
+  // Handle save project settings (commands)
+  const handleSaveSettings = useCallback(async (newCommands: string[]) => {
+    if (!api || !projectPath) return;
+
+    console.log("⚙️ Saving new commands:", newCommands);
+
+    try {
+      // Stop all current servers
+      if (api.stopAllServers) {
+        await api.stopAllServers();
+      }
+
+      // Save commands to cache
+      if (api.saveCommands) {
+        await api.saveCommands(projectPath, newCommands);
+        console.log("✅ Commands saved to cache");
+      }
+
+      // Update local state
+      setCommands(newCommands);
+
+      // Close modal
+      setShowProjectSettings(false);
+
+      // Reinitialize servers with new commands
+      // Give a moment for state to update
+      setTimeout(() => {
+        startAllServers();
+      }, 300);
+    } catch (error) {
+      console.error("❌ Error saving settings:", error);
+    }
+  }, [api, projectPath, setCommands, startAllServers]);
+
 
   if (!projectPath) {
     return (
@@ -150,6 +195,7 @@ function ProjectContent() {
         canGoForward={canGoForward}
         showTerminal={showTerminal}
         isInspecting={isInspecting}
+        showChat={showChat}
         onBackToHome={handleBackToHome}
         onTabClick={(tabId) => {
           handleTabClick(tabId);
@@ -168,6 +214,8 @@ function ProjectContent() {
         onReload={handleReload}
         onToggleTerminal={() => setShowTerminal(!showTerminal)}
         onToggleInspector={handleToggleInspector}
+        onOpenSettings={() => setShowProjectSettings(true)}
+        onToggleChat={() => setShowChat(!showChat)}
         pendingModificationsCount={modifications.length}
       />
 
@@ -266,7 +314,30 @@ function ProjectContent() {
             onClose={() => setShowInspectorPanel(false)}
           />
         )}
+
+        {/* Chat Panel */}
+        {showChat && (
+          <ChatPanel
+            messages={chatAgent.messages}
+            activeTools={chatAgent.activeTools}
+            isStreaming={chatAgent.isStreaming}
+            currentStreamText={chatAgent.currentStreamText}
+            onSendMessage={chatAgent.sendMessage}
+            onAbort={chatAgent.abort}
+            onClearHistory={chatAgent.clearHistory}
+            onClose={() => setShowChat(false)}
+          />
+        )}
       </div>
+
+      {/* Project Settings Modal */}
+      <ProjectSettingsModal
+        isOpen={showProjectSettings}
+        projectPath={projectPath}
+        currentCommands={commands}
+        onClose={() => setShowProjectSettings(false)}
+        onSave={handleSaveSettings}
+      />
     </div>
   );
 }

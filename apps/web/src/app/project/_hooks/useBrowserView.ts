@@ -7,6 +7,7 @@ interface UseBrowserViewProps {
   viewMode: "browser" | "editor";
   firstRunningServer: ServerInstance | undefined;
   showSidebar?: boolean;
+  modalOpen?: boolean;
 }
 
 export function useBrowserView({
@@ -15,6 +16,7 @@ export function useBrowserView({
   viewMode,
   firstRunningServer,
   showSidebar,
+  modalOpen,
 }: UseBrowserViewProps) {
   const [browserViewReady, setBrowserViewReady] = useState(false);
   const [canGoBack, setCanGoBack] = useState(false);
@@ -33,7 +35,7 @@ export function useBrowserView({
     if (!api?.setBrowserViewBounds) return;
 
     const syncBounds = () => {
-      if (viewMode === "editor") {
+      if (viewMode === "editor" || modalOpen) {
         api.setBrowserViewBounds({ x: -9999, y: -9999, width: 1, height: 1 });
       } else if (previewContainerRef.current && browserViewReady) {
         const rect = previewContainerRef.current.getBoundingClientRect();
@@ -69,7 +71,7 @@ export function useBrowserView({
         resizeObserver.disconnect();
       }
     };
-  }, [viewMode, showTerminal, browserViewReady, api, showSidebar]);
+  }, [viewMode, showTerminal, browserViewReady, api, showSidebar, modalOpen]);
 
   // Initialize BrowserView
   useEffect(() => {
