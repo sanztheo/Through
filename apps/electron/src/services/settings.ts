@@ -136,22 +136,13 @@ export const AI_MODELS = [
     description: "🧠 Fast reasoning, cheaper than o3",
   },
   {
-    id: "o1",
-    name: "OpenAI o1",
+    id: "o1-preview",
+    name: "OpenAI o1 Preview",
     provider: "openai",
-    modelId: "o1",
+    modelId: "o1-preview",
     inputPrice: 15,
     outputPrice: 60,
-    description: "🧠 Advanced reasoning",
-  },
-  {
-    id: "o1-mini",
-    name: "OpenAI o1-mini",
-    provider: "openai",
-    modelId: "o1-mini",
-    inputPrice: 1.1,
-    outputPrice: 4.4,
-    description: "🧠 Fast reasoning, affordable",
+    description: "🧠 Advanced reasoning (preview)",
   },
 ];
 
