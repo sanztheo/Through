@@ -50,6 +50,7 @@ interface ElectronAPI {
   validateChanges?: () => Promise<{ success: boolean }>;
   rejectChanges?: () => Promise<{ success: boolean }>;
   clearPendingChanges?: () => Promise<{ success: boolean }>;
+  toggleChanges?: (visible: boolean) => Promise<{ success: boolean; visible: boolean }>;
   getHistory?: (projectPath: string) => Promise<ConversationSummary[]>;
   deleteConversation?: (params: { projectPath: string; conversationId: string }) => Promise<void>;
   getSettings?: () => Promise<AppSettings>;
@@ -101,11 +102,6 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           const finalThinkingContent = thinkingTextRef.current;
           const thinkingId = currentThinkingIdRef.current;
           
-          console.log("🧠 Frontend: REASONING END");
-          console.log("🧠 Frontend: Content length:", finalThinkingContent.length);
-          console.log("🧠 Frontend: Content preview:", finalThinkingContent.substring(0, 100));
-          
-          // Save thinking to timeline with captured content
           if (finalThinkingContent && thinkingId) {
             setTimeline((prev) => [...prev, {
               type: "thinking" as const,
@@ -113,9 +109,6 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
               content: finalThinkingContent,
               timestamp: new Date(),
             }]);
-            console.log("🧠 Frontend: Added thinking to timeline");
-          } else {
-            console.log("🧠 Frontend: No content to save!");
           }
           
           setIsThinking(false);
@@ -351,6 +344,12 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     await api.clearPendingChanges();
   }, [api]);
 
+  // Toggle pending changes visibility
+  const togglePendingChanges = useCallback(async (visible: boolean) => {
+    if (!api?.toggleChanges) return;
+    await api.toggleChanges(visible);
+  }, [api]);
+
   // Load history
   const loadHistory = useCallback(async () => {
     if (!api?.getHistory || !projectPath) return;
@@ -461,6 +460,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     validatePendingChanges,
     rejectPendingChanges,
     dismissPendingChanges,
+    togglePendingChanges,
     conversations,
     currentConversationId,
     loadHistory,

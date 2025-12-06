@@ -361,6 +361,7 @@ function ProjectContent() {
             settings={chatAgent.settings}
             availableModels={chatAgent.availableModels}
             onUpdateSettings={chatAgent.updateSettings}
+            onToggleChanges={chatAgent.togglePendingChanges}
           />
         )}
       </div>

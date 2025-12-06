@@ -207,6 +207,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   validateChanges: () => ipcRenderer.invoke("chat:validate-changes"),
   rejectChanges: () => ipcRenderer.invoke("chat:reject-changes"),
   clearPendingChanges: () => ipcRenderer.invoke("chat:clear-pending-changes"),
+  toggleChanges: (visible: boolean) => ipcRenderer.invoke("chat:toggle-changes", visible),
   
   // History
   getHistory: (projectPath: string) => ipcRenderer.invoke("chat:get-history", projectPath),

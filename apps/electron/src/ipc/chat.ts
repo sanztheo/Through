@@ -72,6 +72,11 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
     return { success: true };
   });
 
+  // Toggle changes visibility (Before/After view)
+  ipcMain.handle("chat:toggle-changes", async (_, visible: boolean) => {
+    return await chatService.toggleChanges(visible);
+  });
+
   // ==================== HISTORY IPC ====================
   
   ipcMain.handle("chat:get-history", async (_, projectPath: string) => {

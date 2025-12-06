@@ -35,6 +35,7 @@ interface ChatPanelProps {
   settings?: AppSettings | null;
   availableModels?: ModelDefinition[];
   onUpdateSettings?: (settings: Partial<AppSettings>) => void;
+  onToggleChanges?: (visible: boolean) => void;
 }
 
 // Tool icons mapping
@@ -363,6 +364,7 @@ export function ChatPanel({
   settings,
   availableModels = [],
   onUpdateSettings,
+  onToggleChanges,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
@@ -769,9 +771,12 @@ export function ChatPanel({
                 </button>
                 <div className="w-[1px] h-6 bg-orange-200 mx-1"></div>
                 <button
-                  onClick={() => setShowValidationBar(false)}
+                  onClick={() => {
+                    setShowValidationBar(false);
+                    onToggleChanges?.(false);
+                  }}
                   className="flex items-center justify-center p-1.5 text-orange-400 hover:text-orange-600 hover:bg-orange-100 rounded-lg transition-colors"
-                  title="Masquer (réduire)"
+                  title="Masquer les modifications (voir l'original)"
                 >
                   <EyeOff className="w-4 h-4" />
                 </button>
@@ -781,9 +786,12 @@ export function ChatPanel({
         ) : (
           <div className="absolute bottom-[60px] right-4 z-20">
             <button
-              onClick={() => setShowValidationBar(true)}
+              onClick={() => {
+                setShowValidationBar(true);
+                onToggleChanges?.(true);
+              }}
               className="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 rounded-xl shadow-lg border border-orange-200 text-xs font-medium transition-all hover:scale-105 ring-1 ring-orange-200/50"
-              title="Afficher les modifications à valider"
+              title="Afficher les modifications (voir le résultat)"
             >
               <div className="relative">
                 <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
