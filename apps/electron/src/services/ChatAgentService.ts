@@ -32,6 +32,15 @@ export interface ToolResultEvent {
   result: any;
 }
 
+// Pending change for validation/rejection
+export interface PendingChange {
+  id: string;
+  type: "create" | "modify" | "delete";
+  filePath: string;
+  backupPath?: string;
+  timestamp: Date;
+}
+
 // Singleton instance
 let chatAgentInstance: ChatAgentService | null = null;
 
@@ -39,6 +48,7 @@ export class ChatAgentService {
   private mainWindow: BrowserWindow | null = null;
   private abortController: AbortController | null = null;
   private projectPath: string = "";
+  private pendingChanges: PendingChange[] = [];
 
   constructor() {
     console.log("🤖 ChatAgentService initialized");
@@ -54,6 +64,87 @@ export class ChatAgentService {
       this.abortController = null;
       console.log("🛑 Chat aborted");
     }
+  }
+
+  // Add a pending change to track
+  private addPendingChange(change: Omit<PendingChange, "id" | "timestamp">) {
+    const pendingChange: PendingChange = {
+      ...change,
+      id: `change-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: new Date(),
+    };
+    this.pendingChanges.push(pendingChange);
+    this.emitPendingChanges();
+    console.log(`📝 Added pending change: ${change.type} ${change.filePath}`);
+  }
+
+  // Emit pending changes to frontend
+  private emitPendingChanges() {
+    this.emit("chat:pending-changes", this.pendingChanges);
+  }
+
+  // Get all pending changes
+  getPendingChanges(): PendingChange[] {
+    return this.pendingChanges;
+  }
+
+  // Validate all pending changes (keep modifications, delete backups)
+  async validateChanges(): Promise<{ success: boolean }> {
+    console.log("✅ Validating all changes...");
+    
+    for (const change of this.pendingChanges) {
+      if (change.backupPath) {
+        try {
+          await fs.unlink(change.backupPath);
+          console.log(`  ✅ Removed backup: ${change.backupPath}`);
+        } catch (error) {
+          console.error(`  ❌ Failed to remove backup: ${change.backupPath}`, error);
+        }
+      }
+    }
+    
+    this.pendingChanges = [];
+    this.emitPendingChanges();
+    return { success: true };
+  }
+
+  // Reject all pending changes (restore from backups)
+  async rejectChanges(): Promise<{ success: boolean }> {
+    console.log("❌ Rejecting all changes...");
+    
+    for (const change of this.pendingChanges) {
+      try {
+        if (change.type === "delete" && change.backupPath) {
+          // Restore deleted file
+          const backupContent = await fs.readFile(change.backupPath, "utf-8");
+          await fs.writeFile(change.filePath, backupContent, "utf-8");
+          await fs.unlink(change.backupPath);
+          console.log(`  ✅ Restored deleted file: ${change.filePath}`);
+        } else if (change.type === "modify" && change.backupPath) {
+          // Restore modified file
+          const backupContent = await fs.readFile(change.backupPath, "utf-8");
+          await fs.writeFile(change.filePath, backupContent, "utf-8");
+          await fs.unlink(change.backupPath);
+          console.log(`  ✅ Restored modified file: ${change.filePath}`);
+        } else if (change.type === "create") {
+          // Delete created file
+          await fs.unlink(change.filePath);
+          console.log(`  ✅ Removed created file: ${change.filePath}`);
+        }
+      } catch (error) {
+        console.error(`  ❌ Failed to restore: ${change.filePath}`, error);
+      }
+    }
+    
+    this.pendingChanges = [];
+    this.emitPendingChanges();
+    return { success: true };
+  }
+
+  // Clear pending changes without action
+  clearPendingChanges() {
+    this.pendingChanges = [];
+    this.emitPendingChanges();
   }
 
   private emit(channel: string, data: any) {
@@ -81,6 +172,7 @@ export class ChatAgentService {
     const projectPath = this.projectPath;
     const emitToolCall = this.emitToolCall.bind(this);
     const emitToolResult = this.emitToolResult.bind(this);
+    const addPendingChange = this.addPendingChange.bind(this);
 
     return {
       // ==================== FILE READING TOOLS ====================
@@ -443,15 +535,26 @@ export class ChatAgentService {
           
           try {
             const fullPath = path.join(projectPath, filePath);
+            let isNewFile = true;
+            let backupPath: string | undefined;
             
             // Create backup if file exists
             try {
               const original = await fs.readFile(fullPath, "utf-8");
-              await fs.writeFile(fullPath + ".backup", original, "utf-8");
+              backupPath = fullPath + ".backup";
+              await fs.writeFile(backupPath, original, "utf-8");
+              isNewFile = false;
             } catch { /* new file */ }
             
             await fs.mkdir(path.dirname(fullPath), { recursive: true });
             await fs.writeFile(fullPath, content, "utf-8");
+            
+            // Track this change
+            addPendingChange({
+              type: isNewFile ? "create" : "modify",
+              filePath: fullPath,
+              backupPath: backupPath,
+            });
             
             const result = { success: true, filePath, explanation };
             emitToolResult({ id: callId, name: "writeFile", result });
@@ -493,10 +596,18 @@ export class ChatAgentService {
             }
             
             // Backup
-            await fs.writeFile(fullPath + ".backup", content, "utf-8");
+            const backupPath = fullPath + ".backup";
+            await fs.writeFile(backupPath, content, "utf-8");
             
             const newContent = normalizedContent.replace(normalizedSearch, replace);
             await fs.writeFile(fullPath, newContent, "utf-8");
+            
+            // Track this change
+            addPendingChange({
+              type: "modify",
+              filePath: fullPath,
+              backupPath: backupPath,
+            });
             
             const result = { success: true, filePath, explanation };
             emitToolResult({ id: callId, name: "replaceInFile", result });
@@ -616,12 +727,20 @@ export class ChatAgentService {
           
           try {
             const fullPath = path.join(projectPath, filePath);
+            const backupPath = fullPath + ".deleted-backup";
             
             // Backup first
             const content = await fs.readFile(fullPath, "utf-8");
-            await fs.writeFile(fullPath + ".deleted-backup", content, "utf-8");
+            await fs.writeFile(backupPath, content, "utf-8");
             
             await fs.unlink(fullPath);
+            
+            // Track this change for validation/rejection
+            addPendingChange({
+              type: "delete",
+              filePath: fullPath,
+              backupPath: backupPath,
+            });
             
             const result = { success: true, filePath };
             emitToolResult({ id: callId, name: "deleteFile", result });

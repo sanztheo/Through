@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { X, Send, Square, Trash2, Loader2, ChevronDown, ChevronRight } from "lucide-react";
-import type { TimelineItem } from "../_hooks/useChatAgent";
+import { X, Send, Square, Trash2, Loader2, ChevronDown, ChevronRight, Check, RotateCcw, EyeOff, FileText } from "lucide-react";
+import type { TimelineItem, PendingChange } from "../_hooks/useChatAgent";
 
 interface ChatPanelProps {
   timeline: TimelineItem[];
@@ -10,10 +10,15 @@ interface ChatPanelProps {
   isThinking?: boolean;
   currentStreamText: string;
   currentThinkingText?: string;
+  pendingChanges?: PendingChange[];
+  projectFiles?: string[]; // List of project files for @ mentions
   onSendMessage: (content: string) => void;
   onAbort: () => void;
   onClearHistory: () => void;
   onClose: () => void;
+  onValidateChanges?: () => void;
+  onRejectChanges?: () => void;
+  onDismissChanges?: () => void;
 }
 
 // Tool icons mapping
@@ -325,14 +330,33 @@ export function ChatPanel({
   isThinking,
   currentStreamText,
   currentThinkingText,
+  pendingChanges = [],
+  projectFiles = [],
   onSendMessage,
   onAbort,
   onClearHistory,
   onClose,
+  onValidateChanges,
+  onRejectChanges,
+  onDismissChanges,
 }: ChatPanelProps) {
   const [input, setInput] = useState("");
+  const [mentionedFiles, setMentionedFiles] = useState<string[]>([]);
+  const [showMentionMenu, setShowMentionMenu] = useState(false);
+  const [mentionFilter, setMentionFilter] = useState("");
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const mentionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Filter files based on mention filter
+  const filteredFiles = useMemo(() => {
+    if (!mentionFilter) return projectFiles.slice(0, 10);
+    const lower = mentionFilter.toLowerCase();
+    return projectFiles
+      .filter(f => f.toLowerCase().includes(lower))
+      .slice(0, 10);
+  }, [projectFiles, mentionFilter]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -344,15 +368,90 @@ export function ChatPanel({
     inputRef.current?.focus();
   }, []);
 
+  // Reset selected index when filtered files change
+  useEffect(() => {
+    setSelectedMentionIndex(0);
+  }, [filteredFiles]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setInput(value);
+
+    // Check if we're mentioning a file
+    const cursorPos = e.target.selectionStart;
+    const textBeforeCursor = value.substring(0, cursorPos);
+    const atMatch = textBeforeCursor.match(/@([^\s\[\]]*)$/);
+
+    if (atMatch) {
+      setShowMentionMenu(true);
+      setMentionFilter(atMatch[1]);
+    } else {
+      setShowMentionMenu(false);
+      setMentionFilter("");
+    }
+  };
+
+  const insertMention = (file: string) => {
+    const cursorPos = inputRef.current?.selectionStart || input.length;
+    const textBeforeCursor = input.substring(0, cursorPos);
+    const textAfterCursor = input.substring(cursorPos);
+    
+    // Find the @ and remove it from input
+    const atIndex = textBeforeCursor.lastIndexOf("@");
+    if (atIndex !== -1) {
+      const newText = textBeforeCursor.substring(0, atIndex) + textAfterCursor;
+      setInput(newText.trim());
+    }
+    
+    // Add file to mentioned files if not already there
+    if (!mentionedFiles.includes(file)) {
+      setMentionedFiles(prev => [...prev, file]);
+    }
+    
+    setShowMentionMenu(false);
+    setMentionFilter("");
+    inputRef.current?.focus();
+  };
+
+  const removeMention = (file: string) => {
+    setMentionedFiles(prev => prev.filter(f => f !== file));
+  };
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (input.trim() && !isStreaming) {
-      onSendMessage(input);
+    if ((input.trim() || mentionedFiles.length > 0) && !isStreaming) {
+      // Build message with file mentions prefix
+      let fullMessage = input.trim();
+      if (mentionedFiles.length > 0) {
+        const mentionsPrefix = mentionedFiles.map(f => `@[${f}]`).join(" ");
+        fullMessage = mentionsPrefix + (fullMessage ? " " + fullMessage : "");
+      }
+      
+      onSendMessage(fullMessage);
       setInput("");
+      setMentionedFiles([]);
+      setShowMentionMenu(false);
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (showMentionMenu && filteredFiles.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => Math.min(prev + 1, filteredFiles.length - 1));
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSelectedMentionIndex(prev => Math.max(prev - 1, 0));
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(filteredFiles[selectedMentionIndex]);
+        return;
+      } else if (e.key === "Escape") {
+        setShowMentionMenu(false);
+        return;
+      }
+    }
+    
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       handleSubmit();
     }
@@ -477,15 +576,103 @@ export function ChatPanel({
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Pending Changes Validation Bar */}
+      {pendingChanges.length > 0 && !isStreaming && (
+        <div className="border-t border-orange-200 bg-orange-50 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-orange-600 text-sm font-medium">
+                📝 {pendingChanges.length} modification{pendingChanges.length > 1 ? "s" : ""} en attente
+              </span>
+              <span className="text-orange-500 text-xs">
+                {pendingChanges.map(c => c.type).join(", ")}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={onValidateChanges}
+                className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600 transition-colors"
+              >
+                <Check className="w-3 h-3" />
+                Valider
+              </button>
+              <button
+                onClick={onRejectChanges}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Annuler
+              </button>
+              <button
+                onClick={onDismissChanges}
+                className="flex items-center gap-1 px-2 py-1.5 text-gray-500 text-xs rounded-lg hover:bg-gray-200 transition-colors"
+                title="Ignorer"
+              >
+                <EyeOff className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-3">
+      <div className="border-t border-gray-200 p-3 relative">
+        {/* File mention dropdown */}
+        {showMentionMenu && filteredFiles.length > 0 && (
+          <div 
+            ref={mentionMenuRef}
+            className="absolute bottom-full left-3 right-3 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10"
+          >
+            <div className="p-1">
+              <p className="text-xs text-gray-400 px-2 py-1">Fichiers</p>
+              {filteredFiles.map((file, index) => (
+                <button
+                  key={file}
+                  type="button"
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 text-left text-sm rounded-md transition-colors ${
+                    index === selectedMentionIndex 
+                      ? "bg-blue-50 text-blue-700" 
+                      : "text-gray-700 hover:bg-gray-50"
+                  }`}
+                  onClick={() => insertMention(file)}
+                >
+                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="truncate">{file}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mentioned files badges */}
+        {mentionedFiles.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-2">
+            {mentionedFiles.map((file) => (
+              <span
+                key={file}
+                className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-800 text-gray-100 text-xs rounded-md font-mono"
+              >
+                <span className="text-blue-400">@</span>
+                <span className="truncate max-w-[150px]">{file.split("/").pop()}</span>
+                <button
+                  type="button"
+                  onClick={() => removeMention(file)}
+                  className="ml-1 text-gray-400 hover:text-red-400 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="flex gap-2">
           <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder="Décrivez ce que vous voulez modifier..."
+            placeholder={mentionedFiles.length > 0 ? "Décrivez ce que vous voulez faire..." : "Décrivez ce que vous voulez modifier... (@ pour mentionner un fichier)"}
             className="flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent min-h-[60px] max-h-[120px]"
             disabled={isStreaming}
           />
@@ -502,7 +689,7 @@ export function ChatPanel({
             ) : (
               <button
                 type="submit"
-                disabled={!input.trim()}
+                disabled={!input.trim() && mentionedFiles.length === 0}
                 className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Envoyer (⌘+Enter)"
               >
@@ -512,7 +699,7 @@ export function ChatPanel({
           </div>
         </form>
         <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-          ⌘+Enter pour envoyer
+          ⌘+Enter pour envoyer • @ pour mentionner un fichier
         </p>
       </div>
     </div>

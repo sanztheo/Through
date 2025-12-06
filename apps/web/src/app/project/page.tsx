@@ -83,6 +83,27 @@ function ProjectContent() {
   // Chat Agent
   const chatAgent = useChatAgent(api, projectPath);
 
+  // Project files for @ mentions in chat
+  const [projectFiles, setProjectFiles] = useState<string[]>([]);
+
+  // Load project files on mount
+  useEffect(() => {
+    if (!api || !projectPath) return;
+    
+    const loadFiles = async () => {
+      try {
+        const result = await (api as any).listAllFiles(projectPath);
+        if (result.success && result.files) {
+          setProjectFiles(result.files);
+        }
+      } catch (error) {
+        console.error("Failed to load project files:", error);
+      }
+    };
+    
+    loadFiles();
+  }, [api, projectPath]);
+
   const {
     browserViewReady,
     previewContainerRef,
@@ -323,10 +344,15 @@ function ProjectContent() {
             isThinking={chatAgent.isThinking}
             currentStreamText={chatAgent.currentStreamText}
             currentThinkingText={chatAgent.currentThinkingText}
+            pendingChanges={chatAgent.pendingChanges}
+            projectFiles={projectFiles}
             onSendMessage={chatAgent.sendMessage}
             onAbort={chatAgent.abort}
             onClearHistory={chatAgent.clearHistory}
             onClose={() => setShowChat(false)}
+            onValidateChanges={chatAgent.validatePendingChanges}
+            onRejectChanges={chatAgent.rejectPendingChanges}
+            onDismissChanges={chatAgent.dismissPendingChanges}
           />
         )}
       </div>

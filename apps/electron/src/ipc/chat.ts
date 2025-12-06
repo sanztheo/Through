@@ -45,5 +45,29 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
     return { success: true };
   });
 
+  // Get pending changes
+  ipcMain.handle("chat:get-pending-changes", async () => {
+    return chatService.getPendingChanges();
+  });
+
+  // Validate all changes (keep modifications)
+  ipcMain.handle("chat:validate-changes", async () => {
+    console.log("✅ IPC: Validating all changes...");
+    return await chatService.validateChanges();
+  });
+
+  // Reject all changes (restore from backups)
+  ipcMain.handle("chat:reject-changes", async () => {
+    console.log("❌ IPC: Rejecting all changes...");
+    return await chatService.rejectChanges();
+  });
+
+  // Clear pending changes without action
+  ipcMain.handle("chat:clear-pending-changes", async () => {
+    console.log("🗑️ IPC: Clearing pending changes...");
+    chatService.clearPendingChanges();
+    return { success: true };
+  });
+
   console.log("✅ Chat IPC handlers registered");
 }

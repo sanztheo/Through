@@ -116,6 +116,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   renameFile: (oldPath: string, newPath: string) =>
     ipcRenderer.invoke("fs:rename", { oldPath, newPath }),
   deleteFile: (filePath: string) => ipcRenderer.invoke("fs:delete", filePath),
+  listAllFiles: (projectPath: string) => ipcRenderer.invoke("fs:list-all-files", projectPath),
 
   // Element Inspector
   toggleInspector: (enabled: boolean) =>
@@ -197,7 +198,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("chat:tool-result", (_, result) => callback(result));
     return () => ipcRenderer.removeAllListeners("chat:tool-result");
   },
+  onPendingChanges: (callback: (changes: any[]) => void) => {
+    ipcRenderer.removeAllListeners("chat:pending-changes");
+    ipcRenderer.on("chat:pending-changes", (_, changes) => callback(changes));
+    return () => ipcRenderer.removeAllListeners("chat:pending-changes");
+  },
   abortChat: () => ipcRenderer.invoke("chat:abort"),
+  getPendingChanges: () => ipcRenderer.invoke("chat:get-pending-changes"),
+  validateChanges: () => ipcRenderer.invoke("chat:validate-changes"),
+  rejectChanges: () => ipcRenderer.invoke("chat:reject-changes"),
+  clearPendingChanges: () => ipcRenderer.invoke("chat:clear-pending-changes"),
 
   // Git operations
   selectFolderForClone: () => ipcRenderer.invoke("git:select-folder"),

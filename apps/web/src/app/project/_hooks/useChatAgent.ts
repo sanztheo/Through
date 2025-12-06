@@ -9,12 +9,25 @@ export type TimelineItem =
   | { type: "thinking"; id: string; content: string; timestamp: Date }
   | { type: "tool-call"; id: string; name: string; args: Record<string, any>; status: "running" | "completed" | "error"; result?: any; timestamp: Date };
 
+// Pending change for file modifications
+export interface PendingChange {
+  id: string;
+  type: "create" | "modify" | "delete";
+  filePath: string;
+  backupPath?: string;
+  timestamp: Date;
+}
+
 interface ElectronAPI {
   streamChat?: (projectPath: string, messages: Array<{ role: string; content: string }>) => Promise<any>;
   onChatChunk?: (callback: (chunk: any) => void) => () => void;
   onChatToolCall?: (callback: (toolCall: { id: string; name: string; args: any }) => void) => () => void;
   onChatToolResult?: (callback: (result: { id: string; name: string; result: any }) => void) => () => void;
+  onPendingChanges?: (callback: (changes: PendingChange[]) => void) => () => void;
   abortChat?: () => Promise<void>;
+  validateChanges?: () => Promise<{ success: boolean }>;
+  rejectChanges?: () => Promise<{ success: boolean }>;
+  clearPendingChanges?: () => Promise<{ success: boolean }>;
 }
 
 export function useChatAgent(api: ElectronAPI | null, projectPath: string | null) {
@@ -23,6 +36,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
   const [currentStreamText, setCurrentStreamText] = useState("");
   const [currentThinkingText, setCurrentThinkingText] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<PendingChange[]>([]);
   
   // Refs to track state without closure issues
   const streamTextRef = useRef("");
@@ -185,6 +199,13 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       });
     }
 
+    // Listen for pending changes
+    if (api.onPendingChanges) {
+      api.onPendingChanges((changes) => {
+        setPendingChanges(changes);
+      });
+    }
+
     // Cleanup on unmount
     return () => {
       listenersSetupRef.current = false;
@@ -269,14 +290,36 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     setIsThinking(false);
   }, []);
 
+  // Validate all pending changes (keep modifications)
+  const validatePendingChanges = useCallback(async () => {
+    if (!api?.validateChanges) return;
+    await api.validateChanges();
+  }, [api]);
+
+  // Reject all pending changes (restore from backups)
+  const rejectPendingChanges = useCallback(async () => {
+    if (!api?.rejectChanges) return;
+    await api.rejectChanges();
+  }, [api]);
+
+  // Clear pending changes without action
+  const dismissPendingChanges = useCallback(async () => {
+    if (!api?.clearPendingChanges) return;
+    await api.clearPendingChanges();
+  }, [api]);
+
   return {
     timeline,
     isStreaming,
     isThinking,
     currentStreamText,
     currentThinkingText,
+    pendingChanges,
     sendMessage,
     abort,
     clearHistory,
+    validatePendingChanges,
+    rejectPendingChanges,
+    dismissPendingChanges,
   };
 }

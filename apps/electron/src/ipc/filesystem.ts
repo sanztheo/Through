@@ -68,5 +68,39 @@ export function registerFilesystemHandlers() {
     }
   });
 
+  // List all files recursively in a project
+  ipcMain.handle("fs:list-all-files", async (event, projectPath: string) => {
+    try {
+      const files: string[] = [];
+      const ignoreDirs = ["node_modules", ".git", "dist", "build", ".next", ".cache", ".turbo"];
+      const ignoreExtensions = [".lock", ".log", ".map"];
+
+      async function walkDir(dir: string, relativePath: string = "") {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          const relPath = path.join(relativePath, entry.name);
+          
+          if (entry.isDirectory()) {
+            if (!ignoreDirs.includes(entry.name) && !entry.name.startsWith(".")) {
+              await walkDir(fullPath, relPath);
+            }
+          } else if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (!ignoreExtensions.includes(ext) && !entry.name.startsWith(".")) {
+              files.push(relPath);
+            }
+          }
+        }
+      }
+
+      await walkDir(projectPath);
+      return { success: true, files };
+    } catch (error: any) {
+      return { success: false, error: error.message, files: [] };
+    }
+  });
+
   console.log("Filesystem IPC handlers registered");
 }
