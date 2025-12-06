@@ -7,7 +7,9 @@ import type { TimelineItem } from "../_hooks/useChatAgent";
 interface ChatPanelProps {
   timeline: TimelineItem[];
   isStreaming: boolean;
+  isThinking?: boolean;
   currentStreamText: string;
+  currentThinkingText?: string;
   onSendMessage: (content: string) => void;
   onAbort: () => void;
   onClearHistory: () => void;
@@ -16,13 +18,31 @@ interface ChatPanelProps {
 
 // Tool icons mapping
 const toolIcons: Record<string, string> = {
+  // Reading
   readFile: "📖",
+  getLineRange: "📄",
+  getFileInfo: "ℹ️",
+  // Search
+  searchInProject: "🔍",
+  searchInFile: "🔎",
+  searchByRegex: "🔣",
+  findFilesByName: "📁",
+  // Structure
+  listFiles: "📂",
+  getProjectStructure: "🌳",
+  getPackageInfo: "📦",
+  // Writing
   writeFile: "✏️",
   replaceInFile: "🔄",
-  searchInProject: "🔍",
-  listFiles: "📂",
-  createFile: "📄",
+  insertAtLine: "➕",
+  appendToFile: "📝",
+  // Management
+  createFile: "🆕",
   deleteFile: "🗑️",
+  copyFile: "📋",
+  moveFile: "📤",
+  // System
+  runCommand: "⚡",
 };
 
 // Simple markdown parser
@@ -254,10 +274,44 @@ function ToolCard({ item }: { item: TimelineItem & { type: "tool-call" } }) {
   );
 }
 
+// Thinking Card Component
+function ThinkingCard({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="mx-2 rounded-lg border border-purple-200 bg-purple-50 overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-purple-100 transition-colors"
+      >
+        {expanded ? (
+          <ChevronDown className="w-4 h-4 text-purple-500" />
+        ) : (
+          <ChevronRight className="w-4 h-4 text-purple-500" />
+        )}
+        <span className="text-lg">🧠</span>
+        <span className="font-medium text-purple-800">Réflexion</span>
+        {isStreaming && (
+          <Loader2 className="w-4 h-4 animate-spin text-purple-600 ml-auto" />
+        )}
+      </button>
+      {expanded && (
+        <div className="border-t border-purple-200 px-3 py-2 bg-purple-25">
+          <p className="text-xs text-purple-700 italic whitespace-pre-wrap">
+            {content || "..."}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function ChatPanel({
   timeline,
   isStreaming,
+  isThinking,
   currentStreamText,
+  currentThinkingText,
   onSendMessage,
   onAbort,
   onClearHistory,
@@ -366,8 +420,19 @@ export function ChatPanel({
             );
           }
 
+          if (item.type === "thinking") {
+            return (
+              <ThinkingCard key={item.id} content={item.content} />
+            );
+          }
+
           return null;
         })}
+
+        {/* Current Thinking (streaming) */}
+        {isThinking && currentThinkingText && (
+          <ThinkingCard content={currentThinkingText} isStreaming={true} />
+        )}
 
         {/* Streaming Response */}
         {isStreaming && currentStreamText && (

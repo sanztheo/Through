@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 export type TimelineItem = 
   | { type: "user-message"; id: string; content: string; timestamp: Date }
   | { type: "assistant-message"; id: string; content: string; timestamp: Date }
+  | { type: "thinking"; id: string; content: string; timestamp: Date }
   | { type: "tool-call"; id: string; name: string; args: Record<string, any>; status: "running" | "completed" | "error"; result?: any; timestamp: Date };
 
 interface ElectronAPI {
@@ -20,10 +21,14 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamText, setCurrentStreamText] = useState("");
+  const [currentThinkingText, setCurrentThinkingText] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
   
   // Refs to track state without closure issues
   const streamTextRef = useRef("");
+  const thinkingTextRef = useRef("");
   const currentMessageIdRef = useRef<string | null>(null);
+  const currentThinkingIdRef = useRef<string | null>(null);
   const listenersSetupRef = useRef(false);
 
   // Setup listeners only once when API becomes available
@@ -35,7 +40,32 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     // Listen for text chunks
     if (api.onChatChunk) {
       api.onChatChunk((chunk) => {
-        if (chunk.type === "text" && chunk.content) {
+        // Handle reasoning/thinking
+        if (chunk.type === "reasoning-start") {
+          setIsThinking(true);
+          thinkingTextRef.current = "";
+          currentThinkingIdRef.current = `thinking-${Date.now()}`;
+          setCurrentThinkingText("");
+        } else if (chunk.type === "reasoning" && chunk.content) {
+          thinkingTextRef.current += chunk.content;
+          setCurrentThinkingText(thinkingTextRef.current);
+        } else if (chunk.type === "reasoning-end") {
+          // Save thinking to timeline
+          if (thinkingTextRef.current && currentThinkingIdRef.current) {
+            setTimeline((prev) => [...prev, {
+              type: "thinking" as const,
+              id: currentThinkingIdRef.current!,
+              content: thinkingTextRef.current,
+              timestamp: new Date(),
+            }]);
+          }
+          setIsThinking(false);
+          thinkingTextRef.current = "";
+          currentThinkingIdRef.current = null;
+          setCurrentThinkingText("");
+        }
+        // Handle regular text
+        else if (chunk.type === "text" && chunk.content) {
           streamTextRef.current += chunk.content;
           setCurrentStreamText(streamTextRef.current);
         } else if (chunk.type === "done") {
@@ -45,17 +75,14 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
             const messageId = currentMessageIdRef.current;
             
             setTimeline((prev) => {
-              // Check if this message already exists
               const exists = prev.some(item => item.id === messageId);
               if (exists) {
-                // Update existing message
                 return prev.map(item => 
                   item.id === messageId && item.type === "assistant-message"
                     ? { ...item, content: finalContent }
                     : item
                 );
               } else {
-                // Add new message
                 return [...prev, {
                   type: "assistant-message" as const,
                   id: messageId,
@@ -71,6 +98,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
           currentMessageIdRef.current = null;
           setCurrentStreamText("");
           setIsStreaming(false);
+          setIsThinking(false);
         } else if (chunk.type === "error") {
           setTimeline((prev) => [...prev, {
             type: "assistant-message",
@@ -79,6 +107,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
             timestamp: new Date(),
           }]);
           setIsStreaming(false);
+          setIsThinking(false);
           streamTextRef.current = "";
           currentMessageIdRef.current = null;
           setCurrentStreamText("");
@@ -111,7 +140,6 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
             );
           });
           
-          // Reset for next message segment
           streamTextRef.current = "";
           setCurrentStreamText("");
         }
@@ -156,7 +184,9 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
 
       // Reset refs for new conversation turn
       streamTextRef.current = "";
+      thinkingTextRef.current = "";
       currentMessageIdRef.current = `msg-${Date.now()}`;
+      currentThinkingIdRef.current = null;
 
       // Add user message to timeline
       setTimeline((prev) => [...prev, {
@@ -168,7 +198,9 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
 
       // Clear previous stream state
       setCurrentStreamText("");
+      setCurrentThinkingText("");
       setIsStreaming(true);
+      setIsThinking(false);
 
       // Build messages for API from timeline
       const messages = timeline
@@ -186,6 +218,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
       } catch (error: any) {
         console.error("Chat error:", error);
         setIsStreaming(false);
+        setIsThinking(false);
       }
     },
     [api, projectPath, timeline]
@@ -195,6 +228,7 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
     if (api?.abortChat) {
       await api.abortChat();
       setIsStreaming(false);
+      setIsThinking(false);
       
       // Keep any partial response
       if (streamTextRef.current) {
@@ -214,14 +248,20 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
   const clearHistory = useCallback(() => {
     setTimeline([]);
     setCurrentStreamText("");
+    setCurrentThinkingText("");
     streamTextRef.current = "";
+    thinkingTextRef.current = "";
     currentMessageIdRef.current = null;
+    currentThinkingIdRef.current = null;
+    setIsThinking(false);
   }, []);
 
   return {
     timeline,
     isStreaming,
+    isThinking,
     currentStreamText,
+    currentThinkingText,
     sendMessage,
     abort,
     clearHistory,

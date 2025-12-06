@@ -320,7 +320,9 @@ function ProjectContent() {
           <ChatPanel
             timeline={chatAgent.timeline}
             isStreaming={chatAgent.isStreaming}
+            isThinking={chatAgent.isThinking}
             currentStreamText={chatAgent.currentStreamText}
+            currentThinkingText={chatAgent.currentThinkingText}
             onSendMessage={chatAgent.sendMessage}
             onAbort={chatAgent.abort}
             onClearHistory={chatAgent.clearHistory}
