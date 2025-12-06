@@ -82,19 +82,5 @@ export function registerChatHandlers(mainWindow: BrowserWindow) {
     return await chatService.deleteConversation(data.projectPath, data.conversationId);
   });
 
-  // ==================== SETTINGS IPC ====================
-
-  ipcMain.handle("settings:get", async () => {
-    return getSettings();
-  });
-
-  ipcMain.handle("settings:set", async (_, settings: Partial<AppSettings>) => {
-    return saveSettings(settings);
-  });
-
-  ipcMain.handle("settings:get-models", async () => {
-    return AI_MODELS;
-  });
-
   console.log("✅ Chat IPC handlers registered");
 }

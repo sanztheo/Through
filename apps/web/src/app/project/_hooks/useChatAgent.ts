@@ -414,13 +414,27 @@ export function useChatAgent(api: ElectronAPI | null, projectPath: string | null
 
   // Load settings and models
   const loadSettingsAndModels = useCallback(async () => {
-    if (!api?.getSettings || !api?.getModels) return;
-    const [currentSettings, models] = await Promise.all([
-      api.getSettings(),
-      api.getModels()
-    ]);
-    setSettings(currentSettings);
-    setAvailableModels(models);
+    if (!api?.getSettings) return;
+    
+    try {
+      const result = await api.getSettings() as any;
+      // Handle legacy/combined format (SettingsModal compatibility)
+      if (result && result.settings) {
+        setSettings(result.settings);
+      } else {
+        setSettings(result);
+      }
+      
+      // Get models separately or from result
+      if (result && result.models) {
+        setAvailableModels(result.models);
+      } else if (api.getModels) {
+        const models = await api.getModels();
+        setAvailableModels(models);
+      }
+    } catch (e) {
+      console.error("Failed to load settings:", e);
+    }
   }, [api]);
 
   // Initial load of settings

@@ -75,5 +75,10 @@ export function registerAgentHandlers() {
     return saveSettings(settings);
   });
 
+  // Get available models
+  ipcMain.handle("settings:get-models", async () => {
+    return AI_MODELS;
+  });
+
   console.log("✅ Agent IPC handlers registered");
 }
