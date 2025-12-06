@@ -371,9 +371,17 @@ export function ChatPanel({
   const [showMentionMenu, setShowMentionMenu] = useState(false);
   const [mentionFilter, setMentionFilter] = useState("");
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
+  const [showValidationBar, setShowValidationBar] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const mentionMenuRef = useRef<HTMLDivElement>(null);
+
+  // Show validation bar when new changes arrive
+  useEffect(() => {
+    if (pendingChanges && pendingChanges.length > 0) {
+      setShowValidationBar(true);
+    }
+  }, [pendingChanges]);
 
   // Group conversations by date (Today, Yesterday, Older)
   const groupedConversations = useMemo(() => {
@@ -731,41 +739,64 @@ export function ChatPanel({
 
       {/* Pending Changes Validation Bar */}
       {pendingChanges.length > 0 && !isStreaming && (
-        <div className="border-t border-orange-200 bg-orange-50 px-3 py-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-orange-600 text-sm font-medium">
-                📝 {pendingChanges.length} modification{pendingChanges.length > 1 ? "s" : ""} en attente
-              </span>
-              <span className="text-orange-500 text-xs">
-                {pendingChanges.map(c => c.type).join(", ")}
-              </span>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={onValidateChanges}
-                className="flex items-center gap-1 px-3 py-1.5 bg-green-500 text-white text-xs font-medium rounded-lg hover:bg-green-600 transition-colors"
-              >
-                <Check className="w-3 h-3" />
-                Valider
-              </button>
-              <button
-                onClick={onRejectChanges}
-                className="flex items-center gap-1 px-3 py-1.5 bg-red-500 text-white text-xs font-medium rounded-lg hover:bg-red-600 transition-colors"
-              >
-                <RotateCcw className="w-3 h-3" />
-                Annuler
-              </button>
-              <button
-                onClick={onDismissChanges}
-                className="flex items-center gap-1 px-2 py-1.5 text-gray-500 text-xs rounded-lg hover:bg-gray-200 transition-colors"
-                title="Ignorer"
-              >
-                <EyeOff className="w-3 h-3" />
-              </button>
+        showValidationBar ? (
+          <div className="border-t border-orange-200 bg-orange-50 px-3 py-2 animate-in slide-in-from-bottom-2 fade-in duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-orange-600 text-sm font-medium">
+                  📝 {pendingChanges.length} modification{pendingChanges.length > 1 ? "s" : ""} en attente
+                </span>
+                <span className="text-orange-500 text-xs opacity-75 hidden sm:inline">
+                  {pendingChanges.map(c => c.type).join(", ").slice(0, 30)}{pendingChanges.length > 3 ? "..." : ""}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={onValidateChanges}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded-lg hover:bg-green-700 transition-colors shadow-sm"
+                  title="Valider et conserver les modifications"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  Valider
+                </button>
+                <button
+                  onClick={onRejectChanges}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50 transition-colors shadow-sm"
+                  title="Annuler toutes les modifications (restaurer backups)"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Annuler
+                </button>
+                <div className="w-[1px] h-6 bg-orange-200 mx-1"></div>
+                <button
+                  onClick={() => setShowValidationBar(false)}
+                  className="flex items-center justify-center p-1.5 text-orange-400 hover:text-orange-600 hover:bg-orange-100 rounded-lg transition-colors"
+                  title="Masquer (réduire)"
+                >
+                  <EyeOff className="w-4 h-4" />
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="absolute bottom-[60px] right-4 z-20">
+            <button
+              onClick={() => setShowValidationBar(true)}
+              className="flex items-center gap-2 bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 rounded-xl shadow-lg border border-orange-200 text-xs font-medium transition-all hover:scale-105 ring-1 ring-orange-200/50"
+              title="Afficher les modifications à valider"
+            >
+              <div className="relative">
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                <span className="text-lg">📝</span>
+              </div>
+              <div className="flex flex-col items-start -space-y-0.5">
+                <span className="font-bold">{pendingChanges.length} modif{pendingChanges.length > 1 ? "s" : ""}</span>
+                <span className="text-[10px] opacity-75">En attente</span>
+              </div>
+              <ChevronDown className="w-3 h-3 rotate-180 text-orange-400" />
+            </button>
+          </div>
+        )
       )}
 
       {/* Input Area */}
@@ -851,28 +882,37 @@ export function ChatPanel({
                 <div className="h-4 w-[1px] bg-gray-200 mx-1" />
                 
                 {/* Thinking Mode Toggle */}
-                <button 
-                  type="button" 
-                  onClick={() => onUpdateSettings?.({ extendedThinking: !settings?.extendedThinking })}
-                  className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all ${
-                    settings?.extendedThinking 
-                      ? "text-purple-700 bg-purple-50 hover:bg-purple-100 ring-1 ring-purple-200" 
-                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                  }`}
-                  title={settings?.extendedThinking ? "Mode pensée activé" : "Mode rapide"}
-                >
-                  {settings?.extendedThinking ? (
-                    <>
-                      <Brain className="w-3 h-3" />
-                      <span>Thinking</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3 h-3" />
-                      <span>Fast</span>
-                    </>
-                  )}
-                </button>
+                {(() => {
+                  const currentModel = availableModels.find(m => m.id === settings?.aiModel);
+                  const supportsThinking = currentModel?.supportsThinking ?? false;
+                  
+                  return (
+                    <button 
+                      type="button" 
+                      disabled={!supportsThinking}
+                      onClick={() => onUpdateSettings?.({ extendedThinking: !settings?.extendedThinking })}
+                      className={`flex items-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md transition-all ${
+                        !supportsThinking ? "opacity-50 cursor-not-allowed text-gray-400 bg-gray-50" :
+                        settings?.extendedThinking 
+                          ? "text-purple-700 bg-purple-50 hover:bg-purple-100 ring-1 ring-purple-200" 
+                          : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                      }`}
+                      title={!supportsThinking ? "Ce modèle ne supporte pas le mode pensée" : (settings?.extendedThinking ? "Mode pensée activé" : "Mode rapide")}
+                    >
+                      {settings?.extendedThinking && supportsThinking ? (
+                        <>
+                          <Brain className="w-3 h-3" />
+                          <span>Thinking</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3 h-3" />
+                          <span>Fast</span>
+                        </>
+                      )}
+                    </button>
+                  );
+                })()}
 
                  {/* Model Selector */}
                 <div className="relative">
